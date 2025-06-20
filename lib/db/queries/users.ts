@@ -1,42 +1,47 @@
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
-
-export interface CreateUserData {
-  email: string
-  firstName: string
-  lastName: string
-  avatarUrl?: string
-  createdBy: string
-  updatedBy: string
-}
+import { SessionCache } from "@/lib/redis/session-cache"
 
 export class UserQueries {
   static async findByEmail(email: string) {
-    try {
-      const result = await db.select().from(users).where(eq(users.email, email)).limit(1)
-
-      return result[0] || null
-    } catch (error) {
-      console.error("Error finding user by email:", error)
-      throw error
-    }
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1)
+    return result[0] || null
   }
 
-  static async findById(id: string) {
-    try {
-      const result = await db.select().from(users).where(eq(users.id, id)).limit(1)
+  static async upsert(userData: {
+    email: string
+    firstName: string
+    lastName: string
+    avatarUrl: string
+    createdBy: string
+    updatedBy: string
+  }) {
+    const existing = await this.findByEmail(userData.email)
 
-      return result[0] || null
-    } catch (error) {
-      console.error("Error finding user by ID:", error)
-      throw error
-    }
-  }
+    if (existing) {
+      // Update existing user
+      const updated = await db
+        .update(users)
+        .set({
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          avatarUrl: userData.avatarUrl,
+          updatedBy: userData.updatedBy,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.email, userData.email))
+        .returning()
 
-  static async create(userData: CreateUserData) {
-    try {
-      const result = await db
+      const user = updated[0]
+
+      // Update cache
+      await SessionCache.setUser(userData.email, user)
+
+      return user
+    } else {
+      // Create new user
+      const created = await db
         .insert(users)
         .values({
           ...userData,
@@ -45,69 +50,47 @@ export class UserQueries {
         })
         .returning()
 
-      return result[0]
-    } catch (error) {
-      console.error("Error creating user:", error)
-      throw error
+      const user = created[0]
+
+      // Cache new user
+      await SessionCache.setUser(userData.email, user)
+
+      return user
     }
   }
 
-  static async upsert(userData: CreateUserData) {
-    try {
-      // First try to find existing user
-      const existingUser = await this.findByEmail(userData.email)
+  static async updateProfile(
+    email: string,
+    updates: {
+      firstName?: string
+      lastName?: string
+      avatarUrl?: string
+    },
+  ) {
+    const updated = await db
+      .update(users)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.email, email))
+      .returning()
 
-      if (existingUser) {
-        // Update existing user
-        const result = await db
-          .update(users)
-          .set({
-            firstName: userData.firstName,
-            lastName: userData.lastName,
-            avatarUrl: userData.avatarUrl,
-            updatedBy: userData.updatedBy,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.email, userData.email))
-          .returning()
+    const user = updated[0]
 
-        return result[0]
-      } else {
-        // Create new user
-        return await this.create(userData)
-      }
-    } catch (error) {
-      console.error("Error upserting user:", error)
-      throw error
+    if (user) {
+      // Update cache
+      await SessionCache.setUser(email, user)
     }
+
+    return user
   }
 
-  static async updateProfile(email: string, updates: Partial<CreateUserData>) {
-    try {
-      const result = await db
-        .update(users)
-        .set({
-          ...updates,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.email, email))
-        .returning()
+  static async deleteUser(email: string) {
+    // Remove from cache first
+    await SessionCache.deleteUser(email)
 
-      return result[0]
-    } catch (error) {
-      console.error("Error updating user profile:", error)
-      throw error
-    }
-  }
-
-  static async delete(email: string) {
-    try {
-      const result = await db.delete(users).where(eq(users.email, email)).returning()
-
-      return result[0]
-    } catch (error) {
-      console.error("Error deleting user:", error)
-      throw error
-    }
+    // Then delete from database
+    return await db.delete(users).where(eq(users.email, email))
   }
 }

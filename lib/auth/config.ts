@@ -1,9 +1,10 @@
 import type { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import { UserQueries } from "@/lib/db/queries/users"
+import { SessionCache } from "@/lib/redis/session-cache"
 
 export const authConfig: NextAuthOptions = {
-  trustHost: true, // Allow dynamic hosts for preview environments
+  trustHost: true,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -17,7 +18,7 @@ export const authConfig: NextAuthOptions = {
           const [firstName, ...lastNameParts] = (user.name || "").split(" ")
           const lastName = lastNameParts.join(" ")
 
-          await UserQueries.upsert({
+          const dbUser = await UserQueries.upsert({
             email: user.email,
             firstName: firstName || "",
             lastName: lastName || "",
@@ -25,6 +26,9 @@ export const authConfig: NextAuthOptions = {
             createdBy: user.email,
             updatedBy: user.email,
           })
+
+          // Cache user data for faster lookups
+          await SessionCache.setUser(user.email, dbUser)
 
           return true
         } catch (error) {
@@ -34,10 +38,20 @@ export const authConfig: NextAuthOptions = {
       }
       return true
     },
-    async session({ session }) {
+    async session({ session, token }) {
       if (session?.user?.email) {
         try {
-          const user = await UserQueries.findByEmail(session.user.email)
+          // Try cache first, then database
+          let user = await SessionCache.getUser(session.user.email)
+
+          if (!user) {
+            user = await UserQueries.findByEmail(session.user.email)
+            if (user) {
+              // Cache for next time
+              await SessionCache.setUser(session.user.email, user)
+            }
+          }
+
           if (user) {
             session.user.id = user.id
             session.user.name = `${user.firstName} ${user.lastName}`.trim()
@@ -55,5 +69,5 @@ export const authConfig: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
-  debug: process.env.NODE_ENV === "development", // Enable debug logs in development
+  debug: process.env.NODE_ENV === "development",
 }
