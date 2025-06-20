@@ -3,6 +3,7 @@ import GoogleProvider from "next-auth/providers/google"
 import { UserQueries } from "@/lib/db/queries/users"
 
 export const authConfig: NextAuthOptions = {
+  trustHost: true, // Allow dynamic hosts for preview environments
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -34,6 +35,17 @@ export const authConfig: NextAuthOptions = {
       return true
     },
     async session({ session }) {
+      if (session?.user?.email) {
+        try {
+          const user = await UserQueries.findByEmail(session.user.email)
+          if (user) {
+            session.user.id = user.id
+            session.user.name = `${user.firstName} ${user.lastName}`.trim()
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error)
+        }
+      }
       return session
     },
   },
@@ -43,4 +55,5 @@ export const authConfig: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
+  debug: process.env.NODE_ENV === "development", // Enable debug logs in development
 }
