@@ -17,14 +17,29 @@ export function getConstraintSummary(variable: Variable, variables: Variable[]):
       }
       return constraint.minSize ? `[${constraint.minSize}-${constraint.maxSize || "∞"}]` : ""
 
+    case "matrix":
+      const matrixParts = []
+      if (constraint.matrixType) matrixParts.push(constraint.matrixType)
+      if (constraint.rowsType === "manual" && constraint.minRows) {
+        matrixParts.push(`${constraint.minRows}×${constraint.minCols || "?"}`)
+      }
+      return matrixParts.join(" ")
+
     case "string":
       return `${constraint.charSet}`
 
     case "tree":
-      return constraint.treeType
+      const treeParts = []
+      treeParts.push(constraint.treeType)
+      if (constraint.maxDepth) treeParts.push(`depth≤${constraint.maxDepth}`)
+      return treeParts.join(" ")
 
     case "graph":
-      return constraint.graphType
+      const graphParts = []
+      graphParts.push(constraint.graphType)
+      if (constraint.connected) graphParts.push("connected")
+      if (constraint.weighted) graphParts.push("weighted")
+      return graphParts.join(" ")
 
     default:
       return ""

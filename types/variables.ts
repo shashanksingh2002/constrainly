@@ -38,6 +38,9 @@ export interface MatrixConstraint extends BaseConstraint {
   cellMin?: number
   cellMax?: number
   cellRules?: string
+  matrixType?: "rectangular" | "square" | "triangular" | "diagonal" | "sparse"
+  symmetric?: boolean
+  positiveDefinite?: boolean
 }
 
 export interface StringConstraint extends BaseConstraint {
@@ -57,9 +60,18 @@ export interface TreeConstraint extends BaseConstraint {
   minNodes?: number
   maxNodes?: number
   linkedVariable?: string
-  treeType: "binary" | "nary"
+  treeType: "binary" | "nary" | "bst" | "avl" | "heap" | "trie"
+  maxChildren?: number
+  heapType?: "min" | "max"
   maxDepth?: number
-  rootValue?: number
+  minDepth?: number
+  minValue?: number
+  maxValue?: number
+  balanced?: boolean
+  complete?: boolean
+  full?: boolean
+  perfect?: boolean
+  customRules?: string
 }
 
 export interface GraphConstraint extends BaseConstraint {
@@ -72,11 +84,18 @@ export interface GraphConstraint extends BaseConstraint {
   maxEdges?: number
   linkedNodeVariable?: string
   linkedEdgeVariable?: string
-  graphType: "directed" | "undirected"
+  graphType: "directed" | "undirected" | "dag" | "tree" | "bipartite" | "complete"
   connected?: boolean
   weighted?: boolean
   cyclic?: boolean
+  selfLoops?: boolean
   maxDegree?: number
+  minDegree?: number
+  minWeight?: number
+  maxWeight?: number
+  minNodeValue?: number
+  maxNodeValue?: number
+  customRules?: string
 }
 
 export type VariableConstraint =

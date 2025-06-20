@@ -9,11 +9,20 @@ export function getDefaultConstraint(type: VariableType): VariableConstraint {
     case "array":
       return { type: "array", sizeType: "manual" }
     case "matrix":
-      return { type: "matrix", rowsType: "manual", colsType: "manual" }
+      return {
+        type: "matrix",
+        rowsType: "manual",
+        colsType: "manual",
+        matrixType: "rectangular",
+      }
     case "string":
       return { type: "string", lengthType: "manual", charSet: "lowercase" }
     case "tree":
-      return { type: "tree", nodeCountType: "manual", treeType: "binary" }
+      return {
+        type: "tree",
+        nodeCountType: "manual",
+        treeType: "binary",
+      }
     case "graph":
       return {
         type: "graph",

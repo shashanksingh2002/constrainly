@@ -3,6 +3,7 @@
 import type { Variable, VariableConstraint } from "@/types/variables"
 import { ScalarConstraints } from "./scalar-constraints"
 import { ArrayConstraints } from "./array-constraints"
+import { MatrixConstraints } from "./matrix-constraints"
 import { StringConstraints } from "./string-constraints"
 import { TreeConstraints } from "./tree-constraints"
 import { GraphConstraints } from "./graph-constraints"
@@ -38,6 +39,8 @@ export function ConstraintBuilder({ variable, variables, onUpdate }: ConstraintB
       return <ScalarConstraints {...commonProps} />
     case "array":
       return <ArrayConstraints {...commonProps} />
+    case "matrix":
+      return <MatrixConstraints {...commonProps} />
     case "string":
       return <StringConstraints {...commonProps} />
     case "tree":
