@@ -18,6 +18,7 @@ export const authConfig: NextAuthOptions = {
           const [firstName, ...lastNameParts] = (user.name || "").split(" ")
           const lastName = lastNameParts.join(" ")
 
+          // Upsert user data
           const dbUser = await UserQueries.upsert({
             email: user.email,
             firstName: firstName || "",
@@ -26,6 +27,9 @@ export const authConfig: NextAuthOptions = {
             createdBy: user.email,
             updatedBy: user.email,
           })
+
+          // Update last login time
+          await UserQueries.updateLastLogin(user.email)
 
           // Cache user data for faster lookups
           await SessionCache.setUser(user.email, dbUser)
@@ -53,14 +57,25 @@ export const authConfig: NextAuthOptions = {
           }
 
           if (user) {
-            session.user.id = user.id
+            session.user.id = user.id.toString()
             session.user.name = `${user.firstName} ${user.lastName}`.trim()
+
+            // Add last login info to session (optional)
+            if (user.lastLoggedInAt) {
+              session.lastLoginAt = user.lastLoggedInAt.toISOString()
+            }
           }
         } catch (error) {
           console.error("Error fetching user data:", error)
         }
       }
       return session
+    },
+  },
+  events: {
+    async signIn({ user, account, profile }) {
+      // This runs after successful sign in
+      console.log(`User ${user.email} signed in at ${new Date().toISOString()}`)
     },
   },
   pages: {

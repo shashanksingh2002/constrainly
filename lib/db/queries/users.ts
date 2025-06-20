@@ -1,11 +1,16 @@
 import { db } from "@/lib/db"
 import { users } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { eq, desc, gte, sql } from "drizzle-orm"
 import { SessionCache } from "@/lib/redis/session-cache"
 
 export class UserQueries {
   static async findByEmail(email: string) {
     const result = await db.select().from(users).where(eq(users.email, email)).limit(1)
+    return result[0] || null
+  }
+
+  static async findById(id: number) {
+    const result = await db.select().from(users).where(eq(users.id, id)).limit(1)
     return result[0] || null
   }
 
@@ -59,6 +64,31 @@ export class UserQueries {
     }
   }
 
+  static async updateLastLogin(email: string) {
+    const loginTime = new Date()
+
+    const updated = await db
+      .update(users)
+      .set({
+        lastLoggedInAt: loginTime,
+        updatedAt: loginTime,
+      })
+      .where(eq(users.email, email))
+      .returning()
+
+    const user = updated[0]
+
+    if (user) {
+      // Update cache with new login time
+      await SessionCache.setUser(email, user)
+
+      // Also cache the login time separately for quick access
+      await SessionCache.setLastLogin(email, loginTime)
+    }
+
+    return user
+  }
+
   static async updateProfile(
     email: string,
     updates: {
@@ -84,6 +114,36 @@ export class UserQueries {
     }
 
     return user
+  }
+
+  static async getRecentlyActiveUsers(days = 7) {
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+
+    return await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        lastLoggedInAt: users.lastLoggedInAt,
+      })
+      .from(users)
+      .where(gte(users.lastLoggedInAt, cutoffDate))
+      .orderBy(desc(users.lastLoggedInAt))
+  }
+
+  static async getUserLoginStats() {
+    const result = await db
+      .select({
+        totalUsers: sql<number>`count(*)`,
+        activeToday: sql<number>`count(case when last_logged_in_at >= current_date then 1 end)`,
+        activeThisWeek: sql<number>`count(case when last_logged_in_at >= current_date - interval '7 days' then 1 end)`,
+        activeThisMonth: sql<number>`count(case when last_logged_in_at >= current_date - interval '30 days' then 1 end)`,
+      })
+      .from(users)
+
+    return result[0]
   }
 
   static async deleteUser(email: string) {
