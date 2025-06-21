@@ -10,6 +10,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Contrainly - Testcase Generator",
   description: "Define variables and constraints to generate structured test data",
+    generator: 'v0.dev'
 }
 
 export default function RootLayout({

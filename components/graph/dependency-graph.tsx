@@ -39,6 +39,58 @@ export function DependencyGraph({ variables }: DependencyGraphProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
 
+  // Enhanced dependency extraction that handles all constraint types
+  const extractDependencies = useCallback((variable: Variable): string[] => {
+    const deps: string[] = []
+    const constraint = variable.constraint
+
+    switch (constraint.type) {
+      case "array":
+        if (constraint.sizeType === "linked" && constraint.linkedVariable) {
+          deps.push(constraint.linkedVariable)
+        }
+        break
+
+      case "matrix":
+        if (constraint.rowsType === "linked" && constraint.linkedRowVariable) {
+          deps.push(constraint.linkedRowVariable)
+        }
+        if (constraint.colsType === "linked" && constraint.linkedColVariable) {
+          deps.push(constraint.linkedColVariable)
+        }
+        break
+
+      case "string":
+        if (constraint.lengthType === "linked" && constraint.linkedVariable) {
+          deps.push(constraint.linkedVariable)
+        }
+        break
+
+      case "tree":
+        if (constraint.nodeCountType === "linked" && constraint.linkedVariable) {
+          deps.push(constraint.linkedVariable)
+        }
+        break
+
+      case "graph":
+        if (constraint.nodesType === "linked" && constraint.linkedNodeVariable) {
+          deps.push(constraint.linkedNodeVariable)
+        }
+        if (constraint.edgesType === "linked" && constraint.linkedEdgeVariable) {
+          deps.push(constraint.linkedEdgeVariable)
+        }
+        break
+    }
+
+    // Also include any explicitly set dependencies
+    if (variable.dependencies) {
+      deps.push(...variable.dependencies)
+    }
+
+    // Remove duplicates and return
+    return [...new Set(deps)]
+  }, [])
+
   const initializeNodes = useCallback(() => {
     if (variables.length === 0) {
       setNodes([])
@@ -46,75 +98,94 @@ export function DependencyGraph({ variables }: DependencyGraphProps) {
       return
     }
 
-    const width = 600
-    const height = 400
+    const width = 800
+    const height = 500
     const centerX = width / 2
     const centerY = height / 2
 
-    const independentVars = variables.filter((v) => v.dependencies.length === 0)
-    const dependentVars = variables.filter((v) => v.dependencies.length > 0)
+    // Extract actual dependencies for each variable
+    const variablesWithDeps = variables.map((variable) => ({
+      ...variable,
+      actualDependencies: extractDependencies(variable),
+    }))
+
+    const independentVars = variablesWithDeps.filter((v) => v.actualDependencies.length === 0)
+    const dependentVars = variablesWithDeps.filter((v) => v.actualDependencies.length > 0)
 
     const newNodes: GraphNodeData[] = []
 
-    // Position independent variables
+    // Position independent variables in a semi-circle on the left
     independentVars.forEach((variable, index) => {
-      const angle = (index / Math.max(independentVars.length - 1, 1)) * Math.PI - Math.PI / 2
-      const radius = Math.min(80, independentVars.length * 15)
+      const angle = independentVars.length === 1 ? 0 : (index / (independentVars.length - 1)) * Math.PI - Math.PI / 2
+      const radius = Math.min(100, independentVars.length * 20)
+
       newNodes.push({
         id: variable.id,
-        x: centerX - 150 + Math.cos(angle) * radius,
+        x: centerX - 200 + Math.cos(angle) * radius,
         y: centerY + Math.sin(angle) * radius,
-        variable,
+        variable: variable,
         isDragging: false,
       })
     })
 
-    // Position dependent variables by dependency level
-    const dependencyLevels: Variable[][] = []
+    // Position dependent variables by dependency level using topological sorting
+    const dependencyLevels: (typeof variablesWithDeps)[][] = []
     const processed = new Set<string>()
+    const processing = new Set<string>()
 
-    while (processed.size < dependentVars.length) {
-      const currentLevel: Variable[] = []
+    // Add independent variables to processed
+    independentVars.forEach((v) => processed.add(v.id))
+
+    const canProcess = (variable: (typeof variablesWithDeps)[0]) => {
+      return variable.actualDependencies.every((depId) => processed.has(depId))
+    }
+
+    // Build dependency levels
+    while (processed.size < variables.length) {
+      const currentLevel: (typeof variablesWithDeps)[] = []
 
       for (const variable of dependentVars) {
-        if (processed.has(variable.id)) continue
+        if (processed.has(variable.id) || processing.has(variable.id)) continue
 
-        const allDepsProcessed = variable.dependencies.every(
-          (depId) => independentVars.some((v) => v.id === depId) || processed.has(depId),
-        )
-
-        if (allDepsProcessed) {
+        if (canProcess(variable)) {
           currentLevel.push(variable)
-          processed.add(variable.id)
+          processing.add(variable.id)
+        }
+      }
+
+      if (currentLevel.length === 0) {
+        // Handle circular dependencies or remaining variables
+        const remaining = dependentVars.filter((v) => !processed.has(v.id) && !processing.has(v.id))
+        if (remaining.length > 0) {
+          currentLevel.push(...remaining)
+          remaining.forEach((v) => processing.add(v.id))
+        } else {
+          break
         }
       }
 
       if (currentLevel.length > 0) {
         dependencyLevels.push(currentLevel)
-      } else {
-        dependentVars.forEach((v) => {
-          if (!processed.has(v.id)) {
-            currentLevel.push(v)
-            processed.add(v.id)
-          }
+        currentLevel.forEach((v) => {
+          processed.add(v.id)
+          processing.delete(v.id)
         })
-        if (currentLevel.length > 0) {
-          dependencyLevels.push(currentLevel)
-        }
-        break
       }
     }
 
+    // Position dependent variables by level
     dependencyLevels.forEach((level, levelIndex) => {
+      const levelX = centerX - 50 + (levelIndex + 1) * 150
+      const startY = centerY - (level.length - 1) * 30
+
       level.forEach((variable, varIndex) => {
-        const x = centerX + 80 + levelIndex * 120
-        const y = centerY - (level.length - 1) * 25 + varIndex * 50
+        const y = startY + varIndex * 60
 
         newNodes.push({
           id: variable.id,
-          x,
-          y,
-          variable,
+          x: levelX,
+          y: y,
+          variable: variable,
           isDragging: false,
         })
       })
@@ -122,10 +193,11 @@ export function DependencyGraph({ variables }: DependencyGraphProps) {
 
     setNodes(newNodes)
 
-    // Create edges
+    // Create edges based on actual dependencies
     const newEdges: GraphEdgeData[] = []
     newNodes.forEach((node) => {
-      node.variable.dependencies.forEach((depId) => {
+      const actualDeps = extractDependencies(node.variable)
+      actualDeps.forEach((depId) => {
         const fromNode = newNodes.find((n) => n.id === depId)
         if (fromNode) {
           newEdges.push({
@@ -139,7 +211,7 @@ export function DependencyGraph({ variables }: DependencyGraphProps) {
     })
 
     setEdges(newEdges)
-  }, [variables])
+  }, [variables, extractDependencies])
 
   useEffect(() => {
     initializeNodes()
@@ -213,37 +285,45 @@ export function DependencyGraph({ variables }: DependencyGraphProps) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-6 border-b">
+      <div className="p-4 border-b bg-muted/30">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-semibold">Interactive Dependency Graph</h2>
+          <div>
+            <h2 className="text-lg font-semibold">Dependency Graph</h2>
+            <p className="text-sm text-muted-foreground">
+              {variables.length} variables • {edges.length} dependencies
+            </p>
+          </div>
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" onClick={handleZoomOut}>
+            <Button variant="outline" size="icon" onClick={handleZoomOut} title="Zoom Out">
               <ZoomOut className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={handleZoomIn}>
+            <Button variant="outline" size="icon" onClick={handleZoomIn} title="Zoom In">
               <ZoomIn className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={handleReset}>
+            <Button variant="outline" size="icon" onClick={handleReset} title="Reset View">
               <RotateCcw className="w-4 h-4" />
             </Button>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">Drag nodes to rearrange • Zoom and pan to explore</p>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden bg-gradient-to-br from-background to-muted/20">
         <svg
           ref={svgRef}
           className="w-full h-full cursor-grab active:cursor-grabbing"
           viewBox="0 0 800 500"
           style={{
             transform: `scale(${zoom})`,
+            transformOrigin: "center center",
           }}
         >
           <defs>
             <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f1f5f9" strokeWidth="1" />
+              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e2e8f0" strokeWidth="0.5" opacity="0.5" />
             </pattern>
+            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="2" dy="2" stdDeviation="3" floodOpacity="0.1" />
+            </filter>
           </defs>
           <rect width="100%" height="100%" fill="url(#grid)" />
 

@@ -8,29 +8,78 @@ interface GraphEdgeProps {
 }
 
 export function GraphEdge({ edge }: GraphEdgeProps) {
-  const dx = edge.toNode.x - edge.fromNode.x
-  const dy = edge.toNode.y - edge.fromNode.y
-  const length = Math.sqrt(dx * dx + dy * dy)
-  const unitX = dx / length
-  const unitY = dy / length
+  const { fromNode, toNode } = edge
 
-  const nodeRadius = 35
-  const startX = edge.fromNode.x + unitX * nodeRadius
-  const startY = edge.fromNode.y + unitY * nodeRadius
-  const endX = edge.toNode.x - unitX * nodeRadius
-  const endY = edge.toNode.y - unitY * nodeRadius
+  // Calculate connection points on the edge of nodes (assuming 40px radius)
+  const nodeRadius = 40
+  const dx = toNode.x - fromNode.x
+  const dy = toNode.y - fromNode.y
+  const distance = Math.sqrt(dx * dx + dy * dy)
 
-  const arrowLength = 8
-  const arrowAngle = Math.PI / 6
-  const arrowX1 = endX - arrowLength * Math.cos(Math.atan2(dy, dx) - arrowAngle)
-  const arrowY1 = endY - arrowLength * Math.sin(Math.atan2(dy, dx) - arrowAngle)
-  const arrowX2 = endX - arrowLength * Math.cos(Math.atan2(dy, dx) + arrowAngle)
-  const arrowY2 = endY - arrowLength * Math.sin(Math.atan2(dy, dx) + arrowAngle)
+  if (distance === 0) return null
+
+  const unitX = dx / distance
+  const unitY = dy / distance
+
+  const startX = fromNode.x + unitX * nodeRadius
+  const startY = fromNode.y + unitY * nodeRadius
+  const endX = toNode.x - unitX * nodeRadius
+  const endY = toNode.y - unitY * nodeRadius
+
+  // Create a curved path for better visual appeal
+  const midX = (startX + endX) / 2
+  const midY = (startY + endY) / 2
+
+  // Add some curve based on the distance
+  const curvature = Math.min(distance * 0.2, 50)
+  const controlX = midX + unitY * curvature
+  const controlY = midY - unitX * curvature
+
+  const pathData = `M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`
+
+  // Calculate arrow position and angle
+  const arrowSize = 8
+  const angle = Math.atan2(dy, dx)
 
   return (
-    <g>
-      <line x1={startX} y1={startY} x2={endX} y2={endY} stroke="#64748b" strokeWidth="2" />
-      <polygon points={`${endX},${endY} ${arrowX1},${arrowY1} ${arrowX2},${arrowY2}`} fill="#64748b" />
+    <g className="edge">
+      {/* Edge path with gradient */}
+      <defs>
+        <linearGradient id={`gradient-${edge.from}-${edge.to}`} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.8" />
+        </linearGradient>
+      </defs>
+
+      {/* Shadow/glow effect */}
+      <path d={pathData} fill="none" stroke="#3b82f6" strokeWidth="3" opacity="0.3" filter="blur(2px)" />
+
+      {/* Main edge */}
+      <path
+        d={pathData}
+        fill="none"
+        stroke={`url(#gradient-${edge.from}-${edge.to})`}
+        strokeWidth="2"
+        markerEnd="url(#arrowhead)"
+        className="transition-all duration-200 hover:stroke-width-3"
+      />
+
+      {/* Arrowhead */}
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#1d4ed8" className="transition-colors duration-200" />
+        </marker>
+      </defs>
+
+      {/* Interactive hit area */}
+      <path
+        d={pathData}
+        fill="none"
+        stroke="transparent"
+        strokeWidth="12"
+        className="cursor-pointer"
+        title={`Dependency: ${edge.from} → ${edge.to}`}
+      />
     </g>
   )
 }
