@@ -1,53 +1,69 @@
+type LogLevel = "debug" | "info" | "success" | "warn" | "error"
+
 export class GenerationLogger {
-  private static indent = 0
+  /*
+    Simple static logger with indentation support.
+    Every call respects `indentLevel` so nested operations are easier to read.
+  */
+  private static indentLevel = 0
+  private static enabled = true
 
-  static log(message: string, data?: any) {
-    const prefix = "  ".repeat(this.indent)
-    if (data !== undefined) {
-      console.log(`${prefix}${message}`, data)
-    } else {
-      console.log(`${prefix}${message}`)
-    }
-  }
-
-  static debug(message: string, data?: any) {
-    this.log(`🔍 ${message}`, data)
-  }
-
-  static success(message: string, data?: any) {
-    this.log(`✅ ${message}`, data)
-  }
-
-  static warn(message: string, data?: any) {
-    this.log(`⚠️ ${message}`, data)
-  }
-
-  static error(message: string, data?: any) {
-    this.log(`❌ ${message}`, data)
-  }
-
+  // ────────────────────────────────────────────────────────────────────────────
+  // Public helpers
+  // ────────────────────────────────────────────────────────────────────────────
   static section(title: string) {
-    console.log(`\n=== ${title} ===`)
+    this.log("\n=== " + title.toUpperCase() + " ===")
   }
 
   static subsection(title: string) {
-    console.log(`\n--- ${title} ---`)
+    this.log("\n--- " + title + " ---")
   }
 
-  static indent() {
-    this.indent++
+  static log(...args: any[]) {
+    this.print("info", ...args)
   }
 
-  static outdent() {
-    this.indent = Math.max(0, this.indent - 1)
+  static debug(...args: any[]) {
+    this.print("debug", "🔍", ...args)
   }
 
+  static success(...args: any[]) {
+    this.print("success", "✅", ...args)
+  }
+
+  static warn(...args: any[]) {
+    this.print("warn", "⚠️", ...args)
+  }
+
+  static error(...args: any[]) {
+    this.print("error", "❌", ...args)
+  }
+
+  // Execute a callback with one extra indentation level
   static withIndent<T>(fn: () => T): T {
-    this.indent()
+    GenerationLogger.indent()
     try {
       return fn()
     } finally {
-      this.outdent()
+      GenerationLogger.outdent()
     }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Private helpers
+  // ────────────────────────────────────────────────────────────────────────────
+  private static indent() {
+    GenerationLogger.indentLevel++
+  }
+
+  private static outdent() {
+    GenerationLogger.indentLevel = Math.max(0, GenerationLogger.indentLevel - 1)
+  }
+
+  private static print(level: LogLevel, ...args: any[]) {
+    if (!GenerationLogger.enabled) return
+    const prefix = " ".repeat(GenerationLogger.indentLevel * 2)
+    // eslint-disable-next-line no-console
+    console[level === "error" ? "error" : "log"](prefix, ...args)
   }
 }

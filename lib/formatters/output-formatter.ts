@@ -1,100 +1,60 @@
 import type { Variable, OutputFormat } from "@/types/variables"
-import { GenerationLogger } from "../utils/generation-logger"
 
-export function formatOutput(
-  generatedValues: Record<string, any>,
-  variables: Variable[],
-  outputFormat: OutputFormat,
-): string {
-  GenerationLogger.debug("Formatting output according to format:", outputFormat.name)
+/*
+  Converts the generatedValues map into a testcase string
+  according to the user-defined OutputFormat.
+*/
+export function formatOutput(generated: Record<string, any>, variables: Variable[], format: OutputFormat): string {
+  const lines: string[] = []
 
-  const testcaseLines: string[] = []
+  for (const line of format.structure) {
+    if (!line.variableIds || line.variableIds.length === 0) continue
 
-  return GenerationLogger.withIndent(() => {
-    for (const line of outputFormat.structure) {
-      GenerationLogger.debug(`Processing line:`, line)
+    const parts: string[] = []
 
-      if (!line.variableIds || line.variableIds.length === 0) {
-        GenerationLogger.debug("Skipping empty line")
-        continue
-      }
+    for (const id of line.variableIds) {
+      const value = generated[id]
 
-      const lineValues: string[] = []
+      if (value === undefined) continue
 
-      for (const varId of line.variableIds) {
-        const value = generatedValues[varId]
-        const variable = variables.find((v) => v.id === varId)
-
-        GenerationLogger.debug(`Looking up variable ${variable?.name || varId}: ${JSON.stringify(value)}`)
-
-        if (value === undefined) {
-          GenerationLogger.warn(`Variable ${varId} not found in generated values`)
-          continue
-        }
-
-        const formattedValue = formatValue(value, variable?.type || "unknown")
-
-        if (line.type === "newline_separated" && Array.isArray(formattedValue)) {
-          lineValues.push(...formattedValue)
+      // Matrix? (2-D array)
+      if (Array.isArray(value) && Array.isArray(value[0])) {
+        const rows = (value as number[][]).map((row) => row.join(" "))
+        if (line.type === "newline_separated" || line.type === "single") {
+          parts.push(...rows)
         } else {
-          lineValues.push(Array.isArray(formattedValue) ? formattedValue.join(" ") : formattedValue)
+          parts.push(rows.join(" "))
         }
       }
-
-      if (lineValues.length === 0) {
-        GenerationLogger.debug("No values for this line, skipping")
-        continue
+      // 1-D array
+      else if (Array.isArray(value)) {
+        parts.push((value as number[]).join(" "))
       }
-
-      const formattedLine = formatLine(lineValues, line.type, line.customSeparator)
-
-      if (line.type === "newline_separated") {
-        testcaseLines.push(...lineValues)
-      } else if (formattedLine) {
-        testcaseLines.push(formattedLine)
-        GenerationLogger.debug(`Added line: "${formattedLine}"`)
+      // Scalar / string
+      else {
+        parts.push(String(value))
       }
     }
 
-    const result = testcaseLines.join("\n")
-    GenerationLogger.success("Output formatting complete")
-    return result
-  })
-}
+    if (parts.length === 0) continue
 
-function formatValue(value: any, type: string): string | string[] {
-  GenerationLogger.debug(`Formatting ${type} value:`, value)
-
-  switch (type) {
-    case "matrix":
-      // Matrix is 2D array - format each row
-      if (Array.isArray(value) && Array.isArray(value[0])) {
-        return value.map((row: number[]) => row.join(" "))
-      }
-      break
-    case "array":
-      // Array is 1D - join with spaces
-      if (Array.isArray(value)) {
-        return value.join(" ")
-      }
-      break
-    default:
-      // Scalar values
-      return String(value)
+    switch (line.type) {
+      case "single":
+        lines.push(parts[0])
+        break
+      case "space_separated":
+        lines.push(parts.join(" "))
+        break
+      case "newline_separated":
+        lines.push(...parts)
+        break
+      case "custom":
+        lines.push(parts.join(line.customSeparator || " "))
+        break
+      default:
+        lines.push(parts.join(" "))
+    }
   }
 
-  return String(value)
-}
-
-function formatLine(values: string[], type: string, customSeparator?: string): string {
-  switch (type) {
-    case "single":
-      return values[0] || ""
-    case "space_separated":
-      return values.join(" ")
-    case "custom":
-      return values.join(customSeparator || " ")
-    default:
-      return values.join(" ")
-  }
+  return lines.join("\n")
 }
