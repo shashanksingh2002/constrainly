@@ -1,4 +1,11 @@
-import type { Variable, ScalarConstraint, ArrayConstraint, MatrixConstraint } from "@/types/variables"
+import type {
+  Variable,
+  ScalarConstraint,
+  ArrayConstraint,
+  MatrixConstraint,
+  TreeConstraint,
+  GraphConstraint,
+} from "@/types/variables"
 import { GenerationLogger } from "./generation-logger"
 
 export function topologicalSort(variables: Variable[]): Variable[] {
@@ -67,6 +74,32 @@ export function extractDependencies(variable: Variable): string[] {
       }
       if (matrixConstraint.linkedColVariable) {
         deps.push(matrixConstraint.linkedColVariable)
+      }
+      break
+
+    case "tree":
+      const treeConstraint = variable.constraint as TreeConstraint
+      if (treeConstraint.nodeCountType === "linked" && treeConstraint.linkedNodeVariable) {
+        deps.push(treeConstraint.linkedNodeVariable)
+      }
+      if (treeConstraint.nodeValueDependsOn?.variableId) {
+        deps.push(treeConstraint.nodeValueDependsOn.variableId)
+      }
+      break
+
+    case "graph":
+      const graphConstraint = variable.constraint as GraphConstraint
+      if (graphConstraint.nodeCountType === "linked" && graphConstraint.linkedNodeVariable) {
+        deps.push(graphConstraint.linkedNodeVariable)
+      }
+      if (graphConstraint.edgeCountType === "linked" && graphConstraint.linkedEdgeVariable) {
+        deps.push(graphConstraint.linkedEdgeVariable)
+      }
+      if (graphConstraint.nodeValueDependsOn?.variableId) {
+        deps.push(graphConstraint.nodeValueDependsOn.variableId)
+      }
+      if (graphConstraint.edgeWeightDependsOn?.variableId) {
+        deps.push(graphConstraint.edgeWeightDependsOn.variableId)
       }
       break
   }
