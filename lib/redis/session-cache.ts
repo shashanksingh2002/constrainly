@@ -56,14 +56,10 @@ export class SessionCache {
         return null
       }
 
-      const cached = await redis.get(`${REDIS_KEYS.USER_CACHE}${email}`)
-      if (!cached) {
+      const userData: any = await redis.get(`${REDIS_KEYS.USER_CACHE}${email}`)
+      if (!userData) {
         return null
       }
-
-      const userData = JSON.parse(cached as string)
-
-      // Convert string dates back to Date objects
       return {
         ...userData,
         createdAt: userData.createdAt ? new Date(userData.createdAt) : null,
