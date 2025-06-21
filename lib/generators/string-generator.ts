@@ -2,12 +2,12 @@ import type { Variable, StringConstraint } from "@/types/variables"
 import { GenerationLogger } from "../utils/generation-logger"
 
 export function generateStringValue(variable: Variable, existingValues: Record<string, any>): string {
-  const constraint = variable.constraints as StringConstraint
+  const constraint = variable.constraint as StringConstraint
 
   // Determine string length
   let length: number
-  if (constraint.lengthType === "linked" && constraint.linkedLengthVariable) {
-    length = existingValues[constraint.linkedLengthVariable] || 5
+  if (constraint.lengthType === "linked" && constraint.linkedVariable) {
+    length = existingValues[constraint.linkedVariable] || 5
     GenerationLogger.debug(`🔗 String length linked to variable: ${length}`)
   } else {
     const minLength = constraint.minLength || 1
@@ -25,7 +25,9 @@ export function generateStringValue(variable: Variable, existingValues: Record<s
   }
 
   let availableChars = ""
-  if (constraint.allowLowercase) availableChars += charSets.lowercase
+
+  // Check constraint properties for character sets
+  if (constraint.allowLowercase !== false) availableChars += charSets.lowercase
   if (constraint.allowUppercase) availableChars += charSets.uppercase
   if (constraint.allowDigits) availableChars += charSets.digits
   if (constraint.allowSpecial) availableChars += charSets.special
@@ -36,7 +38,7 @@ export function generateStringValue(variable: Variable, existingValues: Record<s
     GenerationLogger.debug(`⚠️ No character set selected, using lowercase`)
   }
 
-  GenerationLogger.debug(`🔤 Character set: ${availableChars.length} characters`)
+  GenerationLogger.debug(`🔤 Character set: ${availableChars.length} characters available`)
 
   let result = ""
   for (let i = 0; i < length; i++) {
@@ -44,6 +46,6 @@ export function generateStringValue(variable: Variable, existingValues: Record<s
     result += availableChars[randomIndex]
   }
 
-  GenerationLogger.debug(`✅ Generated string: "${result}"`)
+  GenerationLogger.success(`Generated string: "${result}"`)
   return result
 }
