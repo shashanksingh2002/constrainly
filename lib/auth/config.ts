@@ -12,7 +12,8 @@ export const authConfig: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account }: any) {
+      console.log(user, account)
       if (account?.provider === "google" && user.email) {
         try {
           const [firstName, ...lastNameParts] = (user.name || "").split(" ")
@@ -42,7 +43,7 @@ export const authConfig: NextAuthOptions = {
       }
       return true
     },
-    async session({ session, token }) {
+    async session({ session, token }: any) {
       if (session?.user?.email) {
         try {
           // Try cache first, then database
@@ -73,7 +74,7 @@ export const authConfig: NextAuthOptions = {
     },
   },
   events: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account, profile }: any) {
       // This runs after successful sign in
       console.log(`User ${user.email} signed in at ${new Date().toISOString()}`)
     },
