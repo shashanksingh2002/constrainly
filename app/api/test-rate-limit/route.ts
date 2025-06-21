@@ -10,4 +10,5 @@ async function handler(req: NextRequest) {
 }
 
 // Apply rate limiting: 5 requests per minute
-export const GET = withRateLimit(RateLimiter.configs.auth)(handler)
+export const GET = (req: NextRequest) =>
+  withRateLimit(RateLimiter.configs.auth)(req, handler)
