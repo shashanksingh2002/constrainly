@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
+import { getServerSession } from "next-auth/next"
 import { authConfig } from "@/lib/auth/config"
 import { UserAnalytics } from "@/lib/db/queries/user-analytics"
 import { RateLimiter } from "@/lib/redis/rate-limiter"
@@ -7,7 +7,7 @@ import { RateLimiter } from "@/lib/redis/rate-limiter"
 export async function GET(request: NextRequest) {
   try {
     // Check authentication
-    const session = await getServerSession(authConfig)
+    const session = await getServerSession(authConfig) as { user?: { email?: string } } | null
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -15,13 +15,15 @@ export async function GET(request: NextRequest) {
     // Apply rate limiting
     const rateLimitResult = await RateLimiter.checkLimit(`analytics:${session.user.email}`, RateLimiter.configs.api)
 
-    if (!rateLimitResult.allowed) {
+    console.log(rateLimitResult)
+
+    if (!rateLimitResult.success) {
       return NextResponse.json(
         { error: "Rate limit exceeded" },
         {
           status: 429,
           headers: {
-            "X-RateLimit-Limit": rateLimitResult.limit.toString(),
+            "X-RateLimit-Limit": rateLimitResult.max.toString(),
             "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
             "X-RateLimit-Reset": rateLimitResult.resetTime.toString(),
           },
