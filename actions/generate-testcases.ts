@@ -1,6 +1,6 @@
 "use server"
 
-import type { Variable, OutputFormat, ScalarConstraint, ArrayConstraint } from "@/types/variables"
+import type { Variable, OutputFormat, ScalarConstraint, ArrayConstraint, MatrixConstraint } from "@/types/variables"
 
 export const generateTestcases = async (
   variables: Variable[],
@@ -180,6 +180,15 @@ function extractDependencies(variable: Variable): string[] {
         deps.push(arrayConstraint.elementDependsOnValue.variableId)
       }
       break
+    case "matrix":
+      const matrixConstraint = variable.constraint as MatrixConstraint
+      if (matrixConstraint.linkedRowVariable) {
+        deps.push(matrixConstraint.linkedRowVariable)
+      }
+      if (matrixConstraint.linkedColVariable) {
+        deps.push(matrixConstraint.linkedColVariable)
+      }
+      break
 
     // Add other constraint types as needed
   }
@@ -199,6 +208,8 @@ function generateVariableValue(variable: Variable, existingValues: Record<string
       return generateArrayValue(variable, existingValues)
     case "string":
       return generateStringValue(variable, existingValues)
+    case "matrix":
+      return generateMatrixValue(variable, existingValues)
     default:
       console.warn(`Unknown variable type: ${variable.type}`)
       return Math.floor(Math.random() * 100) + 1
@@ -328,4 +339,166 @@ function generateStringValue(variable: Variable, existingValues: Record<string, 
     result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   return result
+}
+
+function generateMatrixValue(variable: Variable, existingValues: Record<string, any>): number[][] {
+  const constraint = variable.constraint as MatrixConstraint
+
+  console.log(`🔲 Generating matrix ${variable.name}`)
+  console.log(`🔲 Matrix type: ${constraint.matrixType || "rectangular"}`)
+
+  // Determine matrix dimensions
+  let rows = constraint.minRows || 3
+  let cols = constraint.minCols || 3
+
+  // Handle row dependencies
+  if (constraint.rowsType === "linked" && constraint.linkedRowVariable) {
+    const linkedRowValue = existingValues[constraint.linkedRowVariable]
+    if (linkedRowValue !== undefined) {
+      rows = linkedRowValue
+      console.log(`🔗 Rows linked to ${constraint.linkedRowVariable}: ${rows}`)
+    }
+  } else if (constraint.rowsType === "manual") {
+    const minRows = constraint.minRows || 1
+    const maxRows = constraint.maxRows || 10
+    rows = Math.floor(Math.random() * (maxRows - minRows + 1)) + minRows
+    console.log(`📏 Random rows in range [${minRows}, ${maxRows}]: ${rows}`)
+  }
+
+  // Handle column dependencies
+  if (constraint.matrixType === "square") {
+    cols = rows
+    console.log(`⬜ Square matrix: cols = rows = ${cols}`)
+  } else if (constraint.colsType === "linked" && constraint.linkedColVariable) {
+    const linkedColValue = existingValues[constraint.linkedColVariable]
+    if (linkedColValue !== undefined) {
+      cols = linkedColValue
+      console.log(`🔗 Cols linked to ${constraint.linkedColVariable}: ${cols}`)
+    }
+  } else if (constraint.colsType === "manual") {
+    const minCols = constraint.minCols || 1
+    const maxCols = constraint.maxCols || 10
+    cols = Math.floor(Math.random() * (maxCols - minCols + 1)) + minCols
+    console.log(`📏 Random cols in range [${minCols}, ${maxCols}]: ${cols}`)
+  }
+
+  console.log(`🔲 Final matrix dimensions: ${rows} × ${cols}`)
+
+  // Cell value constraints
+  const cellMin = constraint.cellMin ?? 0
+  const cellMax = constraint.cellMax ?? 100
+
+  // Initialize matrix
+  const matrix: number[][] = Array(rows)
+    .fill(null)
+    .map(() => Array(cols).fill(0))
+
+  // Generate matrix based on type
+  switch (constraint.matrixType) {
+    case "diagonal":
+      return generateDiagonalMatrix(matrix, rows, cols, cellMin, cellMax)
+    case "triangular":
+      return generateTriangularMatrix(matrix, rows, cols, cellMin, cellMax)
+    case "sparse":
+      return generateSparseMatrix(matrix, rows, cols, cellMin, cellMax)
+    case "square":
+    case "rectangular":
+    default:
+      return generateStandardMatrix(matrix, rows, cols, cellMin, cellMax, constraint.symmetric)
+  }
+}
+
+function generateStandardMatrix(
+  matrix: number[][],
+  rows: number,
+  cols: number,
+  cellMin: number,
+  cellMax: number,
+  symmetric?: boolean,
+): number[][] {
+  console.log(`📊 Generating standard matrix (${rows}×${cols})`)
+
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      if (symmetric && i > j && rows === cols) {
+        // For symmetric matrices, copy from upper triangle
+        matrix[i][j] = matrix[j][i]
+      } else {
+        matrix[i][j] = Math.floor(Math.random() * (cellMax - cellMin + 1)) + cellMin
+      }
+    }
+  }
+
+  return matrix
+}
+
+function generateDiagonalMatrix(
+  matrix: number[][],
+  rows: number,
+  cols: number,
+  cellMin: number,
+  cellMax: number,
+): number[][] {
+  console.log(`🔸 Generating diagonal matrix`)
+
+  const minDim = Math.min(rows, cols)
+
+  // Fill diagonal elements
+  for (let i = 0; i < minDim; i++) {
+    matrix[i][i] = Math.floor(Math.random() * (cellMax - cellMin + 1)) + cellMin
+  }
+
+  // All other elements remain 0
+  return matrix
+}
+
+function generateTriangularMatrix(
+  matrix: number[][],
+  rows: number,
+  cols: number,
+  cellMin: number,
+  cellMax: number,
+): number[][] {
+  console.log(`🔺 Generating triangular matrix (upper triangular)`)
+
+  // Generate upper triangular matrix
+  for (let i = 0; i < rows; i++) {
+    for (let j = i; j < cols; j++) {
+      matrix[i][j] = Math.floor(Math.random() * (cellMax - cellMin + 1)) + cellMin
+    }
+  }
+
+  return matrix
+}
+
+function generateSparseMatrix(
+  matrix: number[][],
+  rows: number,
+  cols: number,
+  cellMin: number,
+  cellMax: number,
+): number[][] {
+  console.log(`🕳️ Generating sparse matrix`)
+
+  const totalCells = rows * cols
+  const sparsityFactor = 0.1 + Math.random() * 0.2 // 10-30% non-zero elements
+  const nonZeroCells = Math.floor(totalCells * sparsityFactor)
+
+  console.log(`🕳️ Sparse matrix: ${nonZeroCells}/${totalCells} non-zero cells`)
+
+  // Randomly place non-zero elements
+  const positions = new Set<string>()
+
+  while (positions.size < nonZeroCells) {
+    const i = Math.floor(Math.random() * rows)
+    const j = Math.floor(Math.random() * cols)
+    const key = `${i},${j}`
+
+    if (!positions.has(key)) {
+      positions.add(key)
+      matrix[i][j] = Math.floor(Math.random() * (cellMax - cellMin + 1)) + cellMin
+    }
+  }
+
+  return matrix
 }
