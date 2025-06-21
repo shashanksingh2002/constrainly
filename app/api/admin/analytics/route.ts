@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         {
           status: 429,
           headers: {
-            "X-RateLimit-Limit": rateLimitResult.max.toString(),
+            "X-RateLimit-Limit": rateLimitResult?.max?.toString(),
             "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
             "X-RateLimit-Reset": rateLimitResult.resetTime.toString(),
           },
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       retention,
       timestamp: new Date().toISOString(),
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Analytics API error:", error)
     return NextResponse.json(
       {
