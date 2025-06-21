@@ -212,35 +212,54 @@ function generateScalarValue(variable: Variable, existingValues: Record<string, 
 
   console.log(`Initial range for ${variable.name}: [${min}, ${max}]`)
 
+  // Debug dependency resolution
+  if (constraint.dependsOnValue && constraint.dependsOnValue.variableId) {
+    console.log(`🔗 ${variable.name} depends on variable ID: ${constraint.dependsOnValue.variableId}`)
+    console.log(`🔗 Relationship: ${constraint.dependsOnValue.relationship}`)
+    console.log(`🔗 Available values:`, Object.keys(existingValues))
+  }
+
   // Handle value dependencies
   if (constraint.dependsOnValue && constraint.dependsOnValue.variableId) {
     const dependentValue = existingValues[constraint.dependsOnValue.variableId]
     console.log(`Dependent value: ${dependentValue}`)
 
-    if (dependentValue !== undefined) {
-      const { relationship, multiplier = 1, offset = 0 } = constraint.dependsOnValue
-
-      switch (relationship) {
-        case "less_than":
-          max = Math.min(max, Math.floor(dependentValue * multiplier + offset) - 1)
-          break
-        case "less_equal":
-          max = Math.min(max, Math.floor(dependentValue * multiplier + offset))
-          break
-        case "greater_than":
-          min = Math.max(min, Math.ceil(dependentValue * multiplier + offset) + 1)
-          break
-        case "greater_equal":
-          min = Math.max(min, Math.ceil(dependentValue * multiplier + offset))
-          break
-        case "equal_to":
-          const exactValue = Math.floor(dependentValue * multiplier + offset)
-          console.log(`Equal to: ${exactValue}`)
-          return exactValue
-      }
-
-      console.log(`Adjusted range for ${variable.name}: [${min}, ${max}]`)
+    if (dependentValue === undefined) {
+      console.error(`❌ Dependent variable ${constraint.dependsOnValue.variableId} not found in existingValues!`)
+      console.log("Available values:", existingValues)
+      return min // Fallback to min value
     }
+
+    const { relationship, multiplier = 1, offset = 0 } = constraint.dependsOnValue
+
+    switch (relationship) {
+      case "less_than":
+        const newMaxLT = Math.floor(dependentValue * multiplier + offset) - 1
+        max = Math.min(max, newMaxLT)
+        console.log(`🔗 less_than: ${dependentValue} * ${multiplier} + ${offset} - 1 = ${newMaxLT}, new max: ${max}`)
+        break
+      case "less_equal":
+        const newMaxLE = Math.floor(dependentValue * multiplier + offset)
+        max = Math.min(max, newMaxLE)
+        console.log(`🔗 less_equal: ${dependentValue} * ${multiplier} + ${offset} = ${newMaxLE}, new max: ${max}`)
+        break
+      case "greater_than":
+        const newMinGT = Math.ceil(dependentValue * multiplier + offset) + 1
+        min = Math.max(min, newMinGT)
+        console.log(`🔗 greater_than: ${dependentValue} * ${multiplier} + ${offset} + 1 = ${newMinGT}, new min: ${min}`)
+        break
+      case "greater_equal":
+        const newMinGE = Math.ceil(dependentValue * multiplier + offset)
+        min = Math.max(min, newMinGE)
+        console.log(`🔗 greater_equal: ${dependentValue} * ${multiplier} + ${offset} = ${newMinGE}, new min: ${min}`)
+        break
+      case "equal_to":
+        const exactValue = Math.floor(dependentValue * multiplier + offset)
+        console.log(`🔗 equal_to: ${dependentValue} * ${multiplier} + ${offset} = ${exactValue}`)
+        return exactValue
+    }
+
+    console.log(`Adjusted range for ${variable.name}: [${min}, ${max}]`)
   }
 
   // Ensure min <= max

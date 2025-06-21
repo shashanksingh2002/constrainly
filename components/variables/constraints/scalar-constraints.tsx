@@ -49,6 +49,9 @@ export function ScalarConstraints({
     const updated = { ...constraint.dependsOnValue, [field]: value }
     updateConstraint({ dependsOnValue: updated })
 
+    console.log(`Updating dependency ${field} to:`, value)
+    console.log("Updated constraint:", updated)
+
     // Update dependencies array
     if (field === "variableId" && value) {
       updateDependencies([value])
@@ -56,6 +59,11 @@ export function ScalarConstraints({
   }
 
   const scalarVariables = availableVariables.filter((v) => ["int", "float", "double"].includes(v.type))
+
+  // Debug: Log current constraint state
+  console.log("Current constraint:", constraint)
+  console.log("Has dependency:", hasDependency)
+  console.log("Dependency details:", constraint.dependsOnValue)
 
   // Determine which range inputs should be disabled/modified based on dependency
   const getRangeConstraints = () => {
@@ -126,31 +134,31 @@ export function ScalarConstraints({
     let base = ""
     switch (rel) {
       case "less_than":
-        base = `< ${varName}`
+        base = `< ${varName} (runtime value)`
         break
       case "less_equal":
-        base = `≤ ${varName}`
+        base = `≤ ${varName} (runtime value)`
         break
       case "greater_than":
-        base = `> ${varName}`
+        base = `> ${varName} (runtime value)`
         break
       case "greater_equal":
-        base = `≥ ${varName}`
+        base = `≥ ${varName} (runtime value)`
         break
       case "equal_to":
-        base = `= ${varName}`
+        base = `= ${varName} (runtime value)`
         break
       case "multiple_of":
-        base = `multiple of ${varName}`
+        base = `multiple of ${varName} (runtime value)`
         break
       case "factor_of":
-        base = `factor of ${varName}`
+        base = `factor of ${varName} (runtime value)`
         break
       case "custom":
         return constraint.dependsOnValue.customFormula || "custom formula"
     }
 
-    if (mult !== 1) base = base.replace(varName, `${mult} × ${varName}`)
+    if (mult !== 1) base = base.replace(`${varName} (runtime value)`, `${mult} × ${varName} (runtime value)`)
     if (offset !== 0) base += ` ${offset >= 0 ? "+" : ""}${offset}`
 
     return base
