@@ -1,20 +1,25 @@
 "use server"
 
-import type { Variable, OutputFormat, ScalarConstraint, ArrayConstraint, MatrixConstraint } from "@/types/variables"
+import type { Variable, OutputFormat } from "@/types/variables"
+import { GenerationLogger } from "@/lib/utils/generation-logger"
+import { topologicalSort } from "@/lib/utils/dependency-resolver"
+import { generateVariableValue } from "@/lib/generators"
+import { formatOutput } from "@/lib/formatters/output-formatter"
 
 export const generateTestcases = async (
   variables: Variable[],
   count: number,
   outputFormat: OutputFormat,
 ): Promise<string> => {
-  console.log("=== GENERATION DEBUG ===")
-  console.log(
+  GenerationLogger.section("TESTCASE GENERATION")
+  GenerationLogger.log(
     "Variables:",
     variables.map((v) => ({ id: v.id, name: v.name, type: v.type })),
   )
-  console.log("Output Format:", outputFormat)
-  console.log("Count:", count)
+  GenerationLogger.log("Output Format:", outputFormat.name)
+  GenerationLogger.log("Count:", count)
 
+  // Validation
   if (variables.length === 0) {
     return "❌ No variables defined. Please add some variables first."
   }
@@ -23,7 +28,7 @@ export const generateTestcases = async (
     return "❌ No output format defined. Please set up the output format."
   }
 
-  // Check if output format has valid variable IDs
+  // Validate output format references
   const allVariableIds = variables.map((v) => v.id)
   const usedVariableIds = outputFormat.structure.flatMap((line) => line.variableIds || [])
   const invalidIds = usedVariableIds.filter((id) => !allVariableIds.includes(id))
@@ -35,470 +40,35 @@ export const generateTestcases = async (
   const testcases: string[] = []
 
   for (let i = 0; i < count; i++) {
-    console.log(`\n--- Generating testcase ${i + 1} ---`)
+    GenerationLogger.subsection(`Generating testcase ${i + 1}`)
 
     const generatedValues: Record<string, any> = {}
 
-    // Sort variables by dependencies (variables without dependencies first)
+    // Sort variables by dependencies
     const sortedVariables = topologicalSort(variables)
-    console.log(
+    GenerationLogger.log(
       "Sorted variables:",
       sortedVariables.map((v) => v.name),
     )
 
     // Generate values respecting dependencies
-    for (const variable of sortedVariables) {
-      const value = generateVariableValue(variable, generatedValues)
-      generatedValues[variable.id] = value
-      console.log(`Generated ${variable.name} (${variable.id}): ${JSON.stringify(value)}`)
-    }
-
-    // Format according to output format
-    const testcaseLines: string[] = []
-
-    for (const line of outputFormat.structure) {
-      console.log(`Processing line:`, line)
-
-      if (!line.variableIds || line.variableIds.length === 0) {
-        console.log("Skipping empty line")
-        continue
+    GenerationLogger.withIndent(() => {
+      for (const variable of sortedVariables) {
+        const value = generateVariableValue(variable, generatedValues)
+        generatedValues[variable.id] = value
+        GenerationLogger.success(`Generated ${variable.name}: ${JSON.stringify(value)}`)
       }
+    })
 
-      const lineValues: string[] = []
-
-      for (const varId of line.variableIds) {
-        const value = generatedValues[varId]
-        console.log(`Looking up variable ${varId}: ${JSON.stringify(value)}`)
-
-        if (value === undefined) {
-          console.warn(`❌ Variable ${varId} not found in generated values`)
-          continue
-        }
-
-        if (Array.isArray(value)) {
-          lineValues.push(value.join(" "))
-        } else {
-          lineValues.push(String(value))
-        }
-      }
-
-      if (lineValues.length === 0) {
-        console.log("No values for this line, skipping")
-        continue
-      }
-
-      let formattedLine = ""
-      switch (line.type) {
-        case "single":
-          formattedLine = lineValues[0]
-          break
-        case "space_separated":
-          formattedLine = lineValues.join(" ")
-          break
-        case "newline_separated":
-          testcaseLines.push(...lineValues)
-          continue // Don't add to formattedLine
-        case "custom":
-          formattedLine = lineValues.join(line.customSeparator || " ")
-          break
-        default:
-          formattedLine = lineValues.join(" ")
-      }
-
-      if (formattedLine) {
-        testcaseLines.push(formattedLine)
-        console.log(`Added line: "${formattedLine}"`)
-      }
-    }
-
-    const testcase = testcaseLines.join("\n")
+    // Format output
+    const testcase = formatOutput(generatedValues, variables, outputFormat)
     testcases.push(testcase)
-    console.log(`Testcase ${i + 1} complete:\n${testcase}`)
+
+    GenerationLogger.success(`Testcase ${i + 1} complete:\n${testcase}`)
   }
 
   const result = testcases.join("\n\n")
-  console.log("=== FINAL RESULT ===")
-  console.log(result)
+  GenerationLogger.section("GENERATION COMPLETE")
+  GenerationLogger.log("Final result length:", result.length)
   return result
-}
-
-function topologicalSort(variables: Variable[]): Variable[] {
-  const sorted: Variable[] = []
-  const visited = new Set<string>()
-  const visiting = new Set<string>()
-
-  function visit(variable: Variable) {
-    if (visiting.has(variable.id)) {
-      throw new Error(`Circular dependency detected involving ${variable.name}`)
-    }
-    if (visited.has(variable.id)) return
-
-    visiting.add(variable.id)
-
-    // Visit dependencies first
-    const deps = extractDependencies(variable)
-    console.log(`Dependencies for ${variable.name}:`, deps)
-
-    for (const depId of deps) {
-      const depVariable = variables.find((v) => v.id === depId)
-      if (depVariable) {
-        visit(depVariable)
-      }
-    }
-
-    visiting.delete(variable.id)
-    visited.add(variable.id)
-    sorted.push(variable)
-  }
-
-  for (const variable of variables) {
-    if (!visited.has(variable.id)) {
-      visit(variable)
-    }
-  }
-
-  return sorted
-}
-
-function extractDependencies(variable: Variable): string[] {
-  const deps: string[] = []
-
-  switch (variable.constraint.type) {
-    case "scalar":
-      const scalarConstraint = variable.constraint as ScalarConstraint
-      if (scalarConstraint.dependsOnValue?.variableId) {
-        deps.push(scalarConstraint.dependsOnValue.variableId)
-      }
-      break
-
-    case "array":
-      const arrayConstraint = variable.constraint as ArrayConstraint
-      if (arrayConstraint.linkedVariable) {
-        deps.push(arrayConstraint.linkedVariable)
-      }
-      if (arrayConstraint.elementDependsOnValue?.variableId) {
-        deps.push(arrayConstraint.elementDependsOnValue.variableId)
-      }
-      break
-    case "matrix":
-      const matrixConstraint = variable.constraint as MatrixConstraint
-      if (matrixConstraint.linkedRowVariable) {
-        deps.push(matrixConstraint.linkedRowVariable)
-      }
-      if (matrixConstraint.linkedColVariable) {
-        deps.push(matrixConstraint.linkedColVariable)
-      }
-      break
-
-    // Add other constraint types as needed
-  }
-
-  return deps
-}
-
-function generateVariableValue(variable: Variable, existingValues: Record<string, any>): any {
-  console.log(`Generating value for ${variable.name} (${variable.type})`)
-
-  switch (variable.type) {
-    case "int":
-    case "float":
-    case "double":
-      return generateScalarValue(variable, existingValues)
-    case "array":
-      return generateArrayValue(variable, existingValues)
-    case "string":
-      return generateStringValue(variable, existingValues)
-    case "matrix":
-      return generateMatrixValue(variable, existingValues)
-    default:
-      console.warn(`Unknown variable type: ${variable.type}`)
-      return Math.floor(Math.random() * 100) + 1
-  }
-}
-
-function generateScalarValue(variable: Variable, existingValues: Record<string, any>): number {
-  const constraint = variable.constraint as ScalarConstraint
-  let min = constraint.min ?? 1
-  let max = constraint.max ?? 100
-
-  console.log(`Initial range for ${variable.name}: [${min}, ${max}]`)
-
-  // Debug dependency resolution
-  if (constraint.dependsOnValue && constraint.dependsOnValue.variableId) {
-    console.log(`🔗 ${variable.name} depends on variable ID: ${constraint.dependsOnValue.variableId}`)
-    console.log(`🔗 Relationship: ${constraint.dependsOnValue.relationship}`)
-    console.log(`🔗 Available values:`, Object.keys(existingValues))
-  }
-
-  // Handle value dependencies
-  if (constraint.dependsOnValue && constraint.dependsOnValue.variableId) {
-    const dependentValue = existingValues[constraint.dependsOnValue.variableId]
-    console.log(`Dependent value: ${dependentValue}`)
-
-    if (dependentValue === undefined) {
-      console.error(`❌ Dependent variable ${constraint.dependsOnValue.variableId} not found in existingValues!`)
-      console.log("Available values:", existingValues)
-      return min // Fallback to min value
-    }
-
-    const { relationship, multiplier = 1, offset = 0 } = constraint.dependsOnValue
-
-    switch (relationship) {
-      case "less_than":
-        const newMaxLT = Math.floor(dependentValue * multiplier + offset) - 1
-        max = Math.min(max, newMaxLT)
-        console.log(`🔗 less_than: ${dependentValue} * ${multiplier} + ${offset} - 1 = ${newMaxLT}, new max: ${max}`)
-        break
-      case "less_equal":
-        const newMaxLE = Math.floor(dependentValue * multiplier + offset)
-        max = Math.min(max, newMaxLE)
-        console.log(`🔗 less_equal: ${dependentValue} * ${multiplier} + ${offset} = ${newMaxLE}, new max: ${max}`)
-        break
-      case "greater_than":
-        const newMinGT = Math.ceil(dependentValue * multiplier + offset) + 1
-        min = Math.max(min, newMinGT)
-        console.log(`🔗 greater_than: ${dependentValue} * ${multiplier} + ${offset} + 1 = ${newMinGT}, new min: ${min}`)
-        break
-      case "greater_equal":
-        const newMinGE = Math.ceil(dependentValue * multiplier + offset)
-        min = Math.max(min, newMinGE)
-        console.log(`🔗 greater_equal: ${dependentValue} * ${multiplier} + ${offset} = ${newMinGE}, new min: ${min}`)
-        break
-      case "equal_to":
-        const exactValue = Math.floor(dependentValue * multiplier + offset)
-        console.log(`🔗 equal_to: ${dependentValue} * ${multiplier} + ${offset} = ${exactValue}`)
-        return exactValue
-    }
-
-    console.log(`Adjusted range for ${variable.name}: [${min}, ${max}]`)
-  }
-
-  // Ensure min <= max
-  if (min > max) {
-    console.warn(`Invalid range for ${variable.name}: min(${min}) > max(${max}). Using min value.`)
-    return min
-  }
-
-  const value = Math.floor(Math.random() * (max - min + 1)) + min
-  console.log(`Generated scalar value: ${value}`)
-  return value
-}
-
-function generateArrayValue(variable: Variable, existingValues: Record<string, any>): number[] {
-  const constraint = variable.constraint as ArrayConstraint
-
-  let size = constraint.minSize || 5
-
-  // Handle linked size
-  if (constraint.sizeType === "linked" && constraint.linkedVariable) {
-    const linkedValue = existingValues[constraint.linkedVariable]
-    if (linkedValue !== undefined) {
-      size = linkedValue
-    }
-  }
-
-  const elementMin = constraint.elementMin ?? 1
-  const elementMax = constraint.elementMax ?? 100
-
-  console.log(`Generating array of size ${size}, elements in [${elementMin}, ${elementMax}]`)
-
-  const arr: number[] = []
-  for (let i = 0; i < size; i++) {
-    let elementValue = Math.floor(Math.random() * (elementMax - elementMin + 1)) + elementMin
-
-    // Handle element dependencies
-    if (constraint.elementDependsOnValue?.variableId) {
-      const dependentValue = existingValues[constraint.elementDependsOnValue.variableId]
-      if (dependentValue !== undefined) {
-        const { relationship } = constraint.elementDependsOnValue
-        switch (relationship) {
-          case "less_than":
-            elementValue = Math.min(elementValue, dependentValue - 1)
-            break
-          case "less_equal":
-            elementValue = Math.min(elementValue, dependentValue)
-            break
-          // Add other relationships as needed
-        }
-      }
-    }
-
-    arr.push(elementValue)
-  }
-
-  console.log(`Generated array: [${arr.join(", ")}]`)
-  return arr
-}
-
-function generateStringValue(variable: Variable, existingValues: Record<string, any>): string {
-  // Simple string generation - can be enhanced later
-  const length = Math.floor(Math.random() * 10) + 1
-  const chars = "abcdefghijklmnopqrstuvwxyz"
-  let result = ""
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return result
-}
-
-function generateMatrixValue(variable: Variable, existingValues: Record<string, any>): number[][] {
-  const constraint = variable.constraint as MatrixConstraint
-
-  console.log(`🔲 Generating matrix ${variable.name}`)
-  console.log(`🔲 Matrix type: ${constraint.matrixType || "rectangular"}`)
-
-  // Determine matrix dimensions
-  let rows = constraint.minRows || 3
-  let cols = constraint.minCols || 3
-
-  // Handle row dependencies
-  if (constraint.rowsType === "linked" && constraint.linkedRowVariable) {
-    const linkedRowValue = existingValues[constraint.linkedRowVariable]
-    if (linkedRowValue !== undefined) {
-      rows = linkedRowValue
-      console.log(`🔗 Rows linked to ${constraint.linkedRowVariable}: ${rows}`)
-    }
-  } else if (constraint.rowsType === "manual") {
-    const minRows = constraint.minRows || 1
-    const maxRows = constraint.maxRows || 10
-    rows = Math.floor(Math.random() * (maxRows - minRows + 1)) + minRows
-    console.log(`📏 Random rows in range [${minRows}, ${maxRows}]: ${rows}`)
-  }
-
-  // Handle column dependencies
-  if (constraint.matrixType === "square") {
-    cols = rows
-    console.log(`⬜ Square matrix: cols = rows = ${cols}`)
-  } else if (constraint.colsType === "linked" && constraint.linkedColVariable) {
-    const linkedColValue = existingValues[constraint.linkedColVariable]
-    if (linkedColValue !== undefined) {
-      cols = linkedColValue
-      console.log(`🔗 Cols linked to ${constraint.linkedColVariable}: ${cols}`)
-    }
-  } else if (constraint.colsType === "manual") {
-    const minCols = constraint.minCols || 1
-    const maxCols = constraint.maxCols || 10
-    cols = Math.floor(Math.random() * (maxCols - minCols + 1)) + minCols
-    console.log(`📏 Random cols in range [${minCols}, ${maxCols}]: ${cols}`)
-  }
-
-  console.log(`🔲 Final matrix dimensions: ${rows} × ${cols}`)
-
-  // Cell value constraints
-  const cellMin = constraint.cellMin ?? 0
-  const cellMax = constraint.cellMax ?? 100
-
-  // Initialize matrix
-  const matrix: number[][] = Array(rows)
-    .fill(null)
-    .map(() => Array(cols).fill(0))
-
-  // Generate matrix based on type
-  switch (constraint.matrixType) {
-    case "diagonal":
-      return generateDiagonalMatrix(matrix, rows, cols, cellMin, cellMax)
-    case "triangular":
-      return generateTriangularMatrix(matrix, rows, cols, cellMin, cellMax)
-    case "sparse":
-      return generateSparseMatrix(matrix, rows, cols, cellMin, cellMax)
-    case "square":
-    case "rectangular":
-    default:
-      return generateStandardMatrix(matrix, rows, cols, cellMin, cellMax, constraint.symmetric)
-  }
-}
-
-function generateStandardMatrix(
-  matrix: number[][],
-  rows: number,
-  cols: number,
-  cellMin: number,
-  cellMax: number,
-  symmetric?: boolean,
-): number[][] {
-  console.log(`📊 Generating standard matrix (${rows}×${cols})`)
-
-  for (let i = 0; i < rows; i++) {
-    for (let j = 0; j < cols; j++) {
-      if (symmetric && i > j && rows === cols) {
-        // For symmetric matrices, copy from upper triangle
-        matrix[i][j] = matrix[j][i]
-      } else {
-        matrix[i][j] = Math.floor(Math.random() * (cellMax - cellMin + 1)) + cellMin
-      }
-    }
-  }
-
-  return matrix
-}
-
-function generateDiagonalMatrix(
-  matrix: number[][],
-  rows: number,
-  cols: number,
-  cellMin: number,
-  cellMax: number,
-): number[][] {
-  console.log(`🔸 Generating diagonal matrix`)
-
-  const minDim = Math.min(rows, cols)
-
-  // Fill diagonal elements
-  for (let i = 0; i < minDim; i++) {
-    matrix[i][i] = Math.floor(Math.random() * (cellMax - cellMin + 1)) + cellMin
-  }
-
-  // All other elements remain 0
-  return matrix
-}
-
-function generateTriangularMatrix(
-  matrix: number[][],
-  rows: number,
-  cols: number,
-  cellMin: number,
-  cellMax: number,
-): number[][] {
-  console.log(`🔺 Generating triangular matrix (upper triangular)`)
-
-  // Generate upper triangular matrix
-  for (let i = 0; i < rows; i++) {
-    for (let j = i; j < cols; j++) {
-      matrix[i][j] = Math.floor(Math.random() * (cellMax - cellMin + 1)) + cellMin
-    }
-  }
-
-  return matrix
-}
-
-function generateSparseMatrix(
-  matrix: number[][],
-  rows: number,
-  cols: number,
-  cellMin: number,
-  cellMax: number,
-): number[][] {
-  console.log(`🕳️ Generating sparse matrix`)
-
-  const totalCells = rows * cols
-  const sparsityFactor = 0.1 + Math.random() * 0.2 // 10-30% non-zero elements
-  const nonZeroCells = Math.floor(totalCells * sparsityFactor)
-
-  console.log(`🕳️ Sparse matrix: ${nonZeroCells}/${totalCells} non-zero cells`)
-
-  // Randomly place non-zero elements
-  const positions = new Set<string>()
-
-  while (positions.size < nonZeroCells) {
-    const i = Math.floor(Math.random() * rows)
-    const j = Math.floor(Math.random() * cols)
-    const key = `${i},${j}`
-
-    if (!positions.has(key)) {
-      positions.add(key)
-      matrix[i][j] = Math.floor(Math.random() * (cellMax - cellMin + 1)) + cellMin
-    }
-  }
-
-  return matrix
 }
