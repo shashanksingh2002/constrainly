@@ -1,89 +1,29 @@
-# Constrainly - Test Case Generator
+Constrainly - Test Case Generator
 
-A modern, extensible platform for generating constraint-based test cases for programming problems.
+Constrainly is a modern web platform for generating constraint-based test cases for competitive programming and algorithm problems. It provides an intuitive interface to define variables with complex relationships and automatically generate valid test data.
 
-## 🚀 Quick Start
+🎯 Key Features
 
-### Prerequisites
-- Node.js 18+ 
-- Yarn 4.x
-- PostgreSQL database (Neon recommended)
-- Redis instance (Upstash recommended)
+    Variable Types: Support for scalars, arrays, matrices, strings, trees, and graphs
+    Smart Dependencies: Variables can depend on other variables' runtime values
+    Constraint System: Define min/max ranges, relationships, and custom rules
+    Visual Dependency Graph: Interactive visualization of variable relationships
+    Flexible Output Formats: Customize how test cases are formatted and structured
+    Authentication: Secure Google OAuth login with user management
+    Database Integration: Persistent storage with Neon PostgreSQL and Redis caching
 
-### Installation
+🔧 How It Works
 
-\`\`\`bash
-# Clone the repository
-git clone <your-repo-url>
-cd testcase-generator
+    Define Variables: Create variables (n, array, matrix, etc.) with constraints
+    Set Dependencies: Link variables so one depends on another's generated value
+    Configure Output: Choose how test cases should be formatted
+    Generate: Automatically create multiple valid test cases respecting all constraints
 
-# Install dependencies
-yarn install
+💡 Perfect For
 
-# Set up environment variables
-cp .env.example .env.local
-# Edit .env.local with your configuration
+    Competitive programming contest preparation
+    Algorithm testing and validation
+    Educational programming exercises
+    Automated test case generation for coding interviews
 
-# Generate database schema
-yarn db:generate
-
-# Run database migrations
-yarn db:migrate
-
-# Start development server
-yarn dev
-\`\`\`
-
-## 📦 Package Management
-
-This project uses **Yarn 4** with modern features:
-- Zero-installs capability
-- Improved performance
-- Better workspace support
-- Enhanced security
-
-### Common Commands
-
-\`\`\`bash
-# Install dependencies
-yarn install
-
-# Add a dependency
-yarn add package-name
-
-# Add dev dependency  
-yarn add -D package-name
-
-# Remove dependency
-yarn remove package-name
-
-# Update dependencies
-yarn up
-
-# Database operations
-yarn db:generate    # Generate Drizzle schema
-yarn db:migrate     # Run migrations
-yarn db:studio      # Open Drizzle Studio
-\`\`\`
-
-## 🛠️ Development
-
-\`\`\`bash
-yarn dev          # Start development server
-yarn build        # Build for production
-yarn start        # Start production server
-yarn lint         # Run ESLint
-\`\`\`
-
-## 🗄️ Database
-
-- **Primary DB**: Neon PostgreSQL with Drizzle ORM
-- **Cache**: Upstash Redis for sessions and rate limiting
-- **Auth**: NextAuth.js with Google OAuth
-
-## 📚 Documentation
-
-- [Environment Setup](./docs/ENVIRONMENT_SETUP.md)
-- [Database Schema](./lib/db/schema.ts)
-- [API Documentation](./docs/API.md)
-
+Built with Next.js, TypeScript, Tailwind CSS, and modern web technologies for a seamless developer experience.
