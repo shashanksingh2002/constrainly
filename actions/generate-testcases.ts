@@ -7,6 +7,14 @@ export const generateTestcases = async (
   count: number,
   outputFormat: OutputFormat,
 ): Promise<string> => {
+  if (variables.length === 0) {
+    return "No variables defined"
+  }
+
+  if (outputFormat.structure.length === 0) {
+    return "No output format defined"
+  }
+
   const testcases: string[] = []
 
   for (let i = 0; i < count; i++) {
@@ -24,11 +32,19 @@ export const generateTestcases = async (
     const testcaseLines: string[] = []
 
     for (const line of outputFormat.structure) {
+      if (!line.variableIds || line.variableIds.length === 0) {
+        continue // Skip empty lines
+      }
+
       const lineValues: string[] = []
 
       for (const varId of line.variableIds) {
-        // Fixed: was line.variables
         const value = generatedValues[varId]
+        if (value === undefined) {
+          console.warn(`Variable ${varId} not found in generated values`)
+          continue
+        }
+
         if (Array.isArray(value)) {
           lineValues.push(value.join(" "))
         } else {
@@ -36,9 +52,13 @@ export const generateTestcases = async (
         }
       }
 
+      if (lineValues.length === 0) {
+        continue // Skip if no values were added
+      }
+
       switch (line.type) {
         case "single":
-          testcaseLines.push(lineValues[0] || "")
+          testcaseLines.push(lineValues[0])
           break
         case "space_separated":
           testcaseLines.push(lineValues.join(" "))
@@ -49,6 +69,8 @@ export const generateTestcases = async (
         case "custom":
           testcaseLines.push(lineValues.join(line.customSeparator || " "))
           break
+        default:
+          testcaseLines.push(lineValues.join(" "))
       }
     }
 
@@ -72,7 +94,8 @@ function topologicalSort(variables: Variable[]): Variable[] {
     visiting.add(variable.id)
 
     // Visit dependencies first
-    for (const depId of variable.dependencies) {
+    const deps = extractDependencies(variable)
+    for (const depId of deps) {
       const depVariable = variables.find((v) => v.id === depId)
       if (depVariable) {
         visit(depVariable)
@@ -91,6 +114,21 @@ function topologicalSort(variables: Variable[]): Variable[] {
   }
 
   return sorted
+}
+
+function extractDependencies(variable: Variable): string[] {
+  const deps: string[] = []
+
+  if (variable.constraint.type === "scalar") {
+    const constraint = variable.constraint as ScalarConstraint
+    if (constraint.dependsOnValue?.variableId) {
+      deps.push(constraint.dependsOnValue.variableId)
+    }
+  }
+
+  // Add other constraint types as needed
+
+  return deps
 }
 
 function generateVariableValue(variable: Variable, existingValues: Record<string, any>): any {
@@ -144,8 +182,6 @@ function generateScalarValue(variable: Variable, existingValues: Record<string, 
           }
           return multiples.length > 0 ? multiples[Math.floor(Math.random() * multiples.length)] : min
         case "custom":
-          // For custom formulas, we'd need a proper expression evaluator
-          // For now, just return a safe value
           return Math.floor(Math.random() * (max - min + 1)) + min
       }
     }
