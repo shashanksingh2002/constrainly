@@ -13,7 +13,6 @@ export const authConfig: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }: any) {
-      console.log(user, account)
       if (account?.provider === "google" && user.email) {
         try {
           const [firstName, ...lastNameParts] = (user.name || "").split(" ")
@@ -32,8 +31,13 @@ export const authConfig: NextAuthOptions = {
           // Update last login time
           await UserQueries.updateLastLogin(user.email)
 
-          // Cache user data for faster lookups
-          await SessionCache.setUser(user.email, dbUser)
+          // Cache user data for faster lookups (with error handling)
+          try {
+            await SessionCache.setUser(user.email, dbUser)
+          } catch (cacheError) {
+            console.warn("Failed to cache user data:", cacheError)
+            // Continue without caching
+          }
 
           return true
         } catch (error) {
@@ -47,19 +51,29 @@ export const authConfig: NextAuthOptions = {
       if (session?.user?.email) {
         try {
           // Try cache first, then database
-          let user = await SessionCache.getUser(session.user.email)
+          let user = null
+
+          try {
+            user = await SessionCache.getUser(session.user.email)
+          } catch (cacheError) {
+            console.warn("Cache lookup failed:", cacheError)
+          }
 
           if (!user) {
             user = await UserQueries.findByEmail(session.user.email)
             if (user) {
-              // Cache for next time
-              await SessionCache.setUser(session.user.email, user)
+              // Try to cache for next time (but don't fail if it doesn't work)
+              try {
+                await SessionCache.setUser(session.user.email, user)
+              } catch (cacheError) {
+                console.warn("Failed to cache user after DB lookup:", cacheError)
+              }
             }
           }
 
           if (user) {
             session.user.id = user.id.toString()
-            session.user.name = `${user.firstName} ${user.lastName}`.trim()
+            session.user.name = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email
 
             // Add last login info to session (optional)
             if (user.lastLoggedInAt) {
@@ -68,6 +82,7 @@ export const authConfig: NextAuthOptions = {
           }
         } catch (error) {
           console.error("Error fetching user data:", error)
+          // Continue with basic session data
         }
       }
       return session
