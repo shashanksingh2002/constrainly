@@ -1,53 +1,60 @@
 import type { Variable, ScalarConstraint } from "@/types/variables"
 import { GenerationLogger } from "../utils/generation-logger"
 
-/*
-  Generates a scalar (int/float/double) value honoring min/max bounds
-  and optional runtime dependency on another variable’s value.
-*/
 export function generateScalarValue(variable: Variable, existingValues: Record<string, any>): number {
-  const constraint = variable.constraint as ScalarConstraint
-  let min = constraint.min ?? 1
-  let max = constraint.max ?? 100
+  const constraint = variable.constraints as ScalarConstraint
 
-  GenerationLogger.debug(`Initial range for ${variable.name}: [${min}, ${max}]`)
+  GenerationLogger.debug(`Initial range for ${variable.name}: [${constraint.min}, ${constraint.max}]`)
 
-  if (constraint.dependsOnValue?.variableId) {
-    const depId = constraint.dependsOnValue.variableId
-    const depVal = existingValues[depId]
+  let min = constraint.min || 1
+  let max = constraint.max || 1000
 
-    if (depVal === undefined) {
-      GenerationLogger.error(`Dependent variable ${depId} not found for ${variable.name}`)
-    } else {
-      const { relationship, multiplier = 1, offset = 0 } = constraint.dependsOnValue
-      const calc = Math.floor(depVal * multiplier + offset)
-      switch (relationship) {
+  // Handle dependencies
+  if (constraint.dependsOnValue) {
+    const dependentValue = existingValues[constraint.dependsOnValue.variableId]
+    if (dependentValue !== undefined) {
+      const multiplier = constraint.dependsOnValue.multiplier || 1
+      const offset = constraint.dependsOnValue.offset || 0
+      const newValue = dependentValue * multiplier + offset
+
+      GenerationLogger.debug(
+        `🔗 ${constraint.dependsOnValue.relationship}: ${dependentValue} * ${multiplier} + ${offset} = ${newValue}`,
+      )
+
+      switch (constraint.dependsOnValue.relationship) {
         case "less_than":
-          max = Math.min(max, calc - 1)
+          max = Math.min(max, newValue - 1)
+          GenerationLogger.debug(`🔗 new max: ${max}`)
           break
         case "less_equal":
-          max = Math.min(max, calc)
+          max = Math.min(max, newValue)
+          GenerationLogger.debug(`🔗 new max: ${max}`)
           break
         case "greater_than":
-          min = Math.max(min, calc + 1)
+          min = Math.max(min, newValue + 1)
+          GenerationLogger.debug(`🔗 new min: ${min}`)
           break
         case "greater_equal":
-          min = Math.max(min, calc)
+          min = Math.max(min, newValue)
+          GenerationLogger.debug(`🔗 new min: ${min}`)
           break
-        case "equal_to":
-          GenerationLogger.success(`Generated scalar value (equal_to): ${calc}`)
-          return calc
+        case "equal":
+          min = max = newValue
+          GenerationLogger.debug(`🔗 fixed value: ${newValue}`)
+          break
       }
     }
-    GenerationLogger.debug(`Adjusted range: [${min}, ${max}]`)
   }
 
+  // Ensure valid range
   if (min > max) {
-    GenerationLogger.warn(`Invalid range for ${variable.name}. Using min value ${min}`)
-    return min
+    GenerationLogger.warn(`Invalid range [${min}, ${max}], using min value`)
+    max = min
   }
 
-  const val = Math.floor(Math.random() * (max - min + 1)) + min
-  GenerationLogger.success(`Generated scalar value: ${val}`)
-  return val
+  const value =
+    variable.type === "int" ? Math.floor(Math.random() * (max - min + 1)) + min : Math.random() * (max - min) + min
+
+  GenerationLogger.debug(`✅ Generated scalar value: ${value}`)
+  return value
 }

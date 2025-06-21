@@ -1,60 +1,87 @@
 import type { Variable, OutputFormat } from "@/types/variables"
+import { GenerationLogger } from "../utils/generation-logger"
 
-/*
-  Converts the generatedValues map into a testcase string
-  according to the user-defined OutputFormat.
-*/
-export function formatOutput(generated: Record<string, any>, variables: Variable[], format: OutputFormat): string {
-  const lines: string[] = []
+export function formatOutput(
+  generatedValues: Record<string, any>,
+  variables: Variable[],
+  outputFormat: OutputFormat,
+): string {
+  GenerationLogger.debug("Formatting output...")
 
-  for (const line of format.structure) {
-    if (!line.variableIds || line.variableIds.length === 0) continue
+  const testcaseLines: string[] = []
 
-    const parts: string[] = []
+  for (const line of outputFormat.structure) {
+    GenerationLogger.debug(`Processing line:`, line)
 
-    for (const id of line.variableIds) {
-      const value = generated[id]
+    if (!line.variableIds || line.variableIds.length === 0) {
+      GenerationLogger.debug("Skipping empty line")
+      continue
+    }
 
-      if (value === undefined) continue
+    const lineValues: string[] = []
 
-      // Matrix? (2-D array)
-      if (Array.isArray(value) && Array.isArray(value[0])) {
-        const rows = (value as number[][]).map((row) => row.join(" "))
-        if (line.type === "newline_separated" || line.type === "single") {
-          parts.push(...rows)
+    for (const varId of line.variableIds) {
+      const value = generatedValues[varId]
+      GenerationLogger.debug(`Looking up variable ${varId}: ${JSON.stringify(value)}`)
+
+      if (value === undefined) {
+        GenerationLogger.warn(`❌ Variable ${varId} not found in generated values`)
+        continue
+      }
+
+      // Handle different value types properly
+      if (Array.isArray(value)) {
+        // Check if it's a 2D array (matrix)
+        if (Array.isArray(value[0])) {
+          // It's a matrix - format each row
+          const matrixRows = value.map((row: number[]) => row.join(" "))
+
+          if (line.type === "newline_separated" || line.type === "single") {
+            // Each row on separate line
+            lineValues.push(...matrixRows)
+          } else {
+            // All rows as one value (flatten with row separator)
+            lineValues.push(matrixRows.join(" "))
+          }
         } else {
-          parts.push(rows.join(" "))
+          // It's a 1D array
+          lineValues.push(value.join(" "))
         }
-      }
-      // 1-D array
-      else if (Array.isArray(value)) {
-        parts.push((value as number[]).join(" "))
-      }
-      // Scalar / string
-      else {
-        parts.push(String(value))
+      } else {
+        lineValues.push(String(value))
       }
     }
 
-    if (parts.length === 0) continue
+    if (lineValues.length === 0) {
+      GenerationLogger.debug("No values for this line, skipping")
+      continue
+    }
 
+    let formattedLine = ""
     switch (line.type) {
       case "single":
-        lines.push(parts[0])
+        formattedLine = lineValues[0]
         break
       case "space_separated":
-        lines.push(parts.join(" "))
+        formattedLine = lineValues.join(" ")
         break
       case "newline_separated":
-        lines.push(...parts)
-        break
+        testcaseLines.push(...lineValues)
+        continue // Don't add to formattedLine
       case "custom":
-        lines.push(parts.join(line.customSeparator || " "))
+        formattedLine = lineValues.join(line.customSeparator || " ")
         break
       default:
-        lines.push(parts.join(" "))
+        formattedLine = lineValues.join(" ")
+    }
+
+    if (formattedLine) {
+      testcaseLines.push(formattedLine)
+      GenerationLogger.debug(`Added line: "${formattedLine}"`)
     }
   }
 
-  return lines.join("\n")
+  const result = testcaseLines.join("\n")
+  GenerationLogger.debug(`Formatted output complete`)
+  return result
 }

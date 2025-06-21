@@ -1,57 +1,41 @@
 import type { Variable, ArrayConstraint } from "@/types/variables"
 import { GenerationLogger } from "../utils/generation-logger"
+import { generateScalarValue } from "./scalar-generator"
 
 export function generateArrayValue(variable: Variable, existingValues: Record<string, any>): number[] {
-  const constraint = variable.constraint as ArrayConstraint
+  const constraint = variable.constraints as ArrayConstraint
 
-  let size = constraint.minSize || 5
-
-  // Handle linked size
-  if (constraint.sizeType === "linked" && constraint.linkedVariable) {
-    const linkedValue = existingValues[constraint.linkedVariable]
-    if (linkedValue !== undefined) {
-      size = linkedValue
-      GenerationLogger.debug(`🔗 Array size linked to ${constraint.linkedVariable}: ${size}`)
-    }
-  } else if (constraint.sizeType === "manual") {
+  // Determine array size
+  let size: number
+  if (constraint.sizeType === "linked" && constraint.linkedSizeVariable) {
+    size = existingValues[constraint.linkedSizeVariable] || 5
+    GenerationLogger.debug(`🔗 Array size linked to variable: ${size}`)
+  } else {
     const minSize = constraint.minSize || 1
     const maxSize = constraint.maxSize || 10
     size = Math.floor(Math.random() * (maxSize - minSize + 1)) + minSize
-    GenerationLogger.debug(`📏 Random array size in range [${minSize}, ${maxSize}]: ${size}`)
+    GenerationLogger.debug(`📏 Array size: ${size} (range: ${minSize}-${maxSize})`)
   }
 
-  const elementMin = constraint.elementMin ?? 1
-  const elementMax = constraint.elementMax ?? 100
+  const result: number[] = []
 
-  GenerationLogger.debug(`Generating array of size ${size}, elements in [${elementMin}, ${elementMax}]`)
-
-  const arr: number[] = []
+  // Generate array elements
   for (let i = 0; i < size; i++) {
-    let elementValue = Math.floor(Math.random() * (elementMax - elementMin + 1)) + elementMin
-
-    // Handle element dependencies
-    if (constraint.elementDependsOnValue?.variableId) {
-      const dependentValue = existingValues[constraint.elementDependsOnValue.variableId]
-      if (dependentValue !== undefined) {
-        const { relationship } = constraint.elementDependsOnValue
-        switch (relationship) {
-          case "less_than":
-            elementValue = Math.min(elementValue, dependentValue - 1)
-            break
-          case "less_equal":
-            elementValue = Math.min(elementValue, dependentValue)
-            break
-          case "bounded_by":
-            elementValue = Math.min(elementValue, dependentValue)
-            break
-        }
-        GenerationLogger.debug(`🔗 Element ${i} adjusted by dependency: ${elementValue}`)
-      }
+    const elementVariable: Variable = {
+      id: `${variable.id}_${i}`,
+      name: `${variable.name}[${i}]`,
+      type: constraint.elementType || "int",
+      constraints: {
+        type: "scalar",
+        min: constraint.elementMin || 1,
+        max: constraint.elementMax || 100,
+      },
     }
 
-    arr.push(elementValue)
+    const value = generateScalarValue(elementVariable, existingValues)
+    result.push(value)
   }
 
-  GenerationLogger.success(`Generated array: [${arr.join(", ")}]`)
-  return arr
+  GenerationLogger.debug(`✅ Generated array: [${result.join(", ")}]`)
+  return result
 }

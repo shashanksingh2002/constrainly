@@ -2,53 +2,48 @@ import type { Variable, StringConstraint } from "@/types/variables"
 import { GenerationLogger } from "../utils/generation-logger"
 
 export function generateStringValue(variable: Variable, existingValues: Record<string, any>): string {
-  const constraint = variable.constraint as StringConstraint
+  const constraint = variable.constraints as StringConstraint
 
-  let length = constraint.minLength || 5
-
-  // Handle linked length
-  if (constraint.lengthType === "linked" && constraint.linkedVariable) {
-    const linkedValue = existingValues[constraint.linkedVariable]
-    if (linkedValue !== undefined) {
-      length = linkedValue
-      GenerationLogger.debug(`🔗 String length linked to ${constraint.linkedVariable}: ${length}`)
-    }
-  } else if (constraint.lengthType === "manual") {
+  // Determine string length
+  let length: number
+  if (constraint.lengthType === "linked" && constraint.linkedLengthVariable) {
+    length = existingValues[constraint.linkedLengthVariable] || 5
+    GenerationLogger.debug(`🔗 String length linked to variable: ${length}`)
+  } else {
     const minLength = constraint.minLength || 1
-    const maxLength = constraint.maxLength || 20
+    const maxLength = constraint.maxLength || 10
     length = Math.floor(Math.random() * (maxLength - minLength + 1)) + minLength
-    GenerationLogger.debug(`📏 Random string length in range [${minLength}, ${maxLength}]: ${length}`)
+    GenerationLogger.debug(`📏 String length: ${length} (range: ${minLength}-${maxLength})`)
   }
 
-  // Determine character set
-  let chars = ""
-  switch (constraint.charSet) {
-    case "lowercase":
-      chars = "abcdefghijklmnopqrstuvwxyz"
-      break
-    case "uppercase":
-      chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      break
-    case "digits":
-      chars = "0123456789"
-      break
-    case "alphanumeric":
-      chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-      break
-    case "custom":
-      chars = constraint.customCharSet || "abcdefghijklmnopqrstuvwxyz"
-      break
-    default:
-      chars = "abcdefghijklmnopqrstuvwxyz"
+  // Define character sets
+  const charSets = {
+    lowercase: "abcdefghijklmnopqrstuvwxyz",
+    uppercase: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    digits: "0123456789",
+    special: "!@#$%^&*()_+-=[]{}|;:,.<>?",
   }
 
-  GenerationLogger.debug(`Generating string of length ${length} from charset: ${constraint.charSet}`)
+  let availableChars = ""
+  if (constraint.allowLowercase) availableChars += charSets.lowercase
+  if (constraint.allowUppercase) availableChars += charSets.uppercase
+  if (constraint.allowDigits) availableChars += charSets.digits
+  if (constraint.allowSpecial) availableChars += charSets.special
+
+  // Default to lowercase if no character set selected
+  if (!availableChars) {
+    availableChars = charSets.lowercase
+    GenerationLogger.debug(`⚠️ No character set selected, using lowercase`)
+  }
+
+  GenerationLogger.debug(`🔤 Character set: ${availableChars.length} characters`)
 
   let result = ""
   for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+    const randomIndex = Math.floor(Math.random() * availableChars.length)
+    result += availableChars[randomIndex]
   }
 
-  GenerationLogger.success(`Generated string: "${result}"`)
+  GenerationLogger.debug(`✅ Generated string: "${result}"`)
   return result
 }
