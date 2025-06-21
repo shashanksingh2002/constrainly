@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { Trash2, Plus } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Trash2, Plus, AlertCircle } from "lucide-react"
 import type { Variable, OutputFormat, OutputLine } from "@/types/variables"
 
 interface OutputFormatBuilderProps {
@@ -56,11 +57,11 @@ export function OutputFormatBuilder({ variables, outputFormat, onUpdateFormat }:
   }
 
   const getPreview = (line: OutputLine): string => {
-    if (line.variableIds.length === 0) return "No variables selected"
+    if (line.variableIds.length === 0) return "⚠️ No variables selected"
 
     const varNames = line.variableIds.map((id) => {
       const variable = variables.find((v) => v.id === id)
-      return variable?.name || id
+      return variable?.name || `Unknown(${id})`
     })
 
     switch (line.type) {
@@ -77,6 +78,27 @@ export function OutputFormatBuilder({ variables, outputFormat, onUpdateFormat }:
     }
   }
 
+  const handleQuickSetup = () => {
+    if (variables.length === 0) return
+
+    // Create a simple format with all variables on one line
+    const newLine: OutputLine = {
+      id: crypto.randomUUID(),
+      type: "space_separated",
+      variableIds: variables.map((v) => v.id),
+      customSeparator: " ",
+      description: "All variables on one line",
+    }
+
+    onUpdateFormat({
+      ...outputFormat,
+      structure: [newLine],
+    })
+  }
+
+  const hasEmptyLines = outputFormat.structure.some((line) => line.variableIds.length === 0)
+  const hasNoLines = outputFormat.structure.length === 0
+
   return (
     <Card>
       <CardHeader>
@@ -87,10 +109,46 @@ export function OutputFormatBuilder({ variables, outputFormat, onUpdateFormat }:
       </CardHeader>
       <Separator />
       <CardContent className="space-y-6">
+        {/* Quick Setup */}
+        {variables.length > 0 && (hasNoLines || hasEmptyLines) && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>Need help getting started? Try the quick setup.</span>
+              <Button variant="outline" size="sm" onClick={handleQuickSetup}>
+                Quick Setup
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Warning for empty lines */}
+        {hasEmptyLines && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Some lines have no variables selected. These lines will be skipped during generation.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* No variables warning */}
+        {variables.length === 0 && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              No variables defined yet. Please add some variables first in the Variables tab.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {outputFormat.structure.map((line, idx) => (
           <div key={line.id} className="border rounded-lg p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="font-medium">Line {idx + 1}</h4>
+              <h4 className="font-medium">
+                Line {idx + 1}
+                {line.variableIds.length === 0 && <span className="text-red-500 ml-2">(Empty)</span>}
+              </h4>
               <Button
                 variant="ghost"
                 size="sm"
@@ -99,6 +157,30 @@ export function OutputFormatBuilder({ variables, outputFormat, onUpdateFormat }:
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
+            </div>
+
+            {/* Variable Selection - Make this more prominent */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-blue-600">📝 Select Variables for this line *</label>
+              <div className="flex flex-wrap gap-2 p-3 border-2 border-dashed border-blue-200 rounded-lg min-h-[60px]">
+                {variables.length > 0 ? (
+                  variables.map((variable) => (
+                    <Badge
+                      key={variable.id}
+                      variant={line.variableIds.includes(variable.id) ? "default" : "outline"}
+                      className="cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => handleVariableToggle(line.id, variable.id)}
+                    >
+                      {variable.name}
+                    </Badge>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No variables available</p>
+                )}
+              </div>
+              {line.variableIds.length === 0 && variables.length > 0 && (
+                <p className="text-sm text-red-600">⚠️ Click on variable names above to add them to this line</p>
+              )}
             </div>
 
             {/* Line Type Selection */}
@@ -110,7 +192,7 @@ export function OutputFormatBuilder({ variables, outputFormat, onUpdateFormat }:
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="single">Single variable</SelectItem>
-                  <SelectItem value="space_separated">Space separated</SelectItem>
+                  <SelectItem value="space_separated">Space separated (e.g., "n m")</SelectItem>
                   <SelectItem value="newline_separated">Each on new line</SelectItem>
                   <SelectItem value="custom">Custom separator</SelectItem>
                 </SelectContent>
@@ -129,28 +211,16 @@ export function OutputFormatBuilder({ variables, outputFormat, onUpdateFormat }:
               </div>
             )}
 
-            {/* Variable Selection */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Variables</label>
-              <div className="flex flex-wrap gap-2">
-                {variables.map((variable) => (
-                  <Badge
-                    key={variable.id}
-                    variant={line.variableIds.includes(variable.id) ? "default" : "outline"}
-                    className="cursor-pointer"
-                    onClick={() => handleVariableToggle(line.id, variable.id)}
-                  >
-                    {variable.name}
-                  </Badge>
-                ))}
-              </div>
-              {variables.length === 0 && <p className="text-sm text-muted-foreground">No variables defined yet</p>}
-            </div>
-
             {/* Preview */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Preview</label>
-              <div className="bg-muted p-2 rounded text-sm font-mono">{getPreview(line)}</div>
+              <div
+                className={`p-2 rounded text-sm font-mono ${
+                  line.variableIds.length === 0 ? "bg-red-50 text-red-700 border border-red-200" : "bg-muted"
+                }`}
+              >
+                {getPreview(line)}
+              </div>
             </div>
 
             {/* Description */}
@@ -173,9 +243,11 @@ export function OutputFormatBuilder({ variables, outputFormat, onUpdateFormat }:
         {outputFormat.structure.length > 0 && (
           <div className="space-y-2">
             <label className="text-sm font-medium">Complete Output Preview</label>
-            <div className="bg-muted p-3 rounded text-sm font-mono whitespace-pre-line">
+            <div className="bg-muted p-3 rounded text-sm font-mono whitespace-pre-line border">
               {outputFormat.structure.map((line, idx) => (
-                <div key={line.id}>{getPreview(line)}</div>
+                <div key={line.id} className={line.variableIds.length === 0 ? "text-red-500" : ""}>
+                  {getPreview(line)}
+                </div>
               ))}
             </div>
           </div>
