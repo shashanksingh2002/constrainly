@@ -83,7 +83,7 @@ export class UserQueries {
       await SessionCache.setUser(email, user)
 
       // Also cache the login time separately for quick access
-      await SessionCache.setLastLogin(email, loginTime)
+      // await SessionCache.setLastLogin(email, loginTime)
     }
 
     return user
