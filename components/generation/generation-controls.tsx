@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import { validateConstraints } from "@/lib/utils/validation"
 import { ValidationIssues } from "./validation-issues"
 import { V2Preview } from "./v2-preview"
+import { generateTestcases } from "@/actions/generate-testcases"
 
 interface GenerationControlsProps {
   variables: Variable[]
@@ -26,6 +27,7 @@ export function GenerationControls({ variables }: GenerationControlsProps) {
   const { toast } = useToast()
 
   const handleGenerate = async () => {
+    console.log(variables)
     if (variables.length === 0) {
       toast({
         title: "No variables defined",
@@ -38,8 +40,8 @@ export function GenerationControls({ variables }: GenerationControlsProps) {
     setIsGenerating(true)
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-
+      const generatedCases = await generateTestcases(variables, testcaseCount)
+      console.log(generateTestcases)
       toast({
         title: "Testcases generated successfully!",
         description: `Generated ${testcaseCount} testcases in ${outputFormat.toUpperCase()} format.`,
