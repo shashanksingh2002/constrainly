@@ -2,7 +2,10 @@ import type { Variable, MatrixConstraint } from "@/types/variables"
 import { GenerationLogger } from "../utils/generation-logger"
 
 export function generateMatrixValue(variable: Variable, existingValues: Record<string, any>): number[][] {
-  const constraint = variable.constraints as MatrixConstraint
+  const constraint = variable.constraint as MatrixConstraint
+
+  GenerationLogger.debug(`🔲 Generating matrix ${variable.name}`)
+  GenerationLogger.debug(`🔲 Matrix type: ${constraint.matrixType || "rectangular"}`)
 
   // Determine matrix dimensions
   let rows: number, cols: number
