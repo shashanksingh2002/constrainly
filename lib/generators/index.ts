@@ -4,6 +4,8 @@ import { generateScalarValue } from "./scalar-generator"
 import { generateArrayValue } from "./array-generator"
 import { generateMatrixValue } from "./matrix-generator"
 import { generateStringValue } from "./string-generator"
+import { generateTreeValue } from "./tree-generator"
+import { generateGraphValue } from "./graph-generator"
 
 export function generateVariableValue(variable: Variable, existingValues: Record<string, any>): any {
   GenerationLogger.debug(`Generating value for ${variable.name} (${variable.type})`)
@@ -20,6 +22,10 @@ export function generateVariableValue(variable: Variable, existingValues: Record
         return generateStringValue(variable, existingValues)
       case "matrix":
         return generateMatrixValue(variable, existingValues)
+      case "tree":
+        return generateTreeValue(variable, existingValues)
+      case "graph":
+        return generateGraphValue(variable, existingValues)
       default:
         GenerationLogger.warn(`Unknown variable type: ${variable.type}`)
         return Math.floor(Math.random() * 100) + 1
@@ -31,3 +37,5 @@ export * from "./scalar-generator"
 export * from "./array-generator"
 export * from "./matrix-generator"
 export * from "./string-generator"
+export * from "./tree-generator"
+export * from "./graph-generator"

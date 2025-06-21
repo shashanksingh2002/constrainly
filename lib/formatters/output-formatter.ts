@@ -1,5 +1,7 @@
 import type { Variable, OutputFormat } from "@/types/variables"
 import { GenerationLogger } from "../utils/generation-logger"
+import { formatTreeOutput } from "./tree-formatter"
+import { formatGraphOutput } from "./graph-formatter"
 
 export function formatOutput(
   generatedValues: Record<string, any>,
@@ -22,6 +24,8 @@ export function formatOutput(
 
     for (const varId of line.variableIds) {
       const value = generatedValues[varId]
+      const variable = variables.find((v) => v.id === varId)
+
       GenerationLogger.debug(`Looking up variable ${varId}: ${JSON.stringify(value)}`)
 
       if (value === undefined) {
@@ -30,7 +34,13 @@ export function formatOutput(
       }
 
       // Handle different value types properly
-      if (Array.isArray(value)) {
+      if (variable?.type === "tree") {
+        const formatted = formatTreeOutput(value, variable, line.type)
+        lineValues.push(formatted)
+      } else if (variable?.type === "graph") {
+        const formatted = formatGraphOutput(value, variable, line.type)
+        lineValues.push(formatted)
+      } else if (Array.isArray(value)) {
         // Check if it's a 2D array (matrix)
         if (Array.isArray(value[0])) {
           // It's a matrix - format each row
