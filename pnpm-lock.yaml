@@ -161,9 +161,6 @@ importers:
       cmdk:
         specifier: latest
         version: 1.1.1(@types/react-dom@19.0.0)(@types/react@19.0.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
-      date-fns:
-        specifier: 4.1.0
-        version: 4.1.0
       drizzle-orm:
         specifier: latest
         version: 0.44.2(21facb5a665a7be9f16c7da42e6c96c3)
