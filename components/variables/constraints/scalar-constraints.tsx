@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Info, AlertTriangle } from "lucide-react"
 import type { ScalarConstraint, Variable, VariableConstraint } from "@/types/variables"
 
 interface ScalarConstraintsProps {
@@ -20,6 +22,11 @@ export function ScalarConstraints({
   updateConstraint,
   updateDependencies,
 }: ScalarConstraintsProps) {
+  const hasDependency = !!constraint.dependsOnValue
+  const dependentVariable = hasDependency
+    ? availableVariables.find((v) => v.id === constraint.dependsOnValue?.variableId)
+    : null
+
   const handleDependencyChange = (enabled: boolean) => {
     if (enabled) {
       updateConstraint({
@@ -50,44 +57,121 @@ export function ScalarConstraints({
 
   const scalarVariables = availableVariables.filter((v) => ["int", "float", "double"].includes(v.type))
 
+  // Determine which range inputs should be disabled/modified based on dependency
+  const getRangeConstraints = () => {
+    if (!hasDependency || !constraint.dependsOnValue?.variableId) {
+      return { showMin: true, showMax: true, minDisabled: false, maxDisabled: false }
+    }
+
+    const relationship = constraint.dependsOnValue.relationship
+    switch (relationship) {
+      case "less_than":
+      case "less_equal":
+        return {
+          showMin: true,
+          showMax: false,
+          minDisabled: false,
+          maxDisabled: true,
+          maxNote: `Max value is dynamically set by ${dependentVariable?.name || "dependent variable"}`,
+        }
+      case "greater_than":
+      case "greater_equal":
+        return {
+          showMin: false,
+          showMax: true,
+          minDisabled: true,
+          maxDisabled: false,
+          minNote: `Min value is dynamically set by ${dependentVariable?.name || "dependent variable"}`,
+        }
+      case "equal_to":
+        return {
+          showMin: false,
+          showMax: false,
+          minDisabled: true,
+          maxDisabled: true,
+          note: `Value is dynamically set to equal ${dependentVariable?.name || "dependent variable"}`,
+        }
+      case "multiple_of":
+      case "factor_of":
+        return {
+          showMin: true,
+          showMax: true,
+          minDisabled: false,
+          maxDisabled: false,
+          note: `Range applies to the generated multiples/factors`,
+        }
+      case "custom":
+        return {
+          showMin: true,
+          showMax: true,
+          minDisabled: false,
+          maxDisabled: false,
+          note: `Range applies as additional constraints to the custom formula`,
+        }
+      default:
+        return { showMin: true, showMax: true, minDisabled: false, maxDisabled: false }
+    }
+  }
+
+  const rangeConstraints = getRangeConstraints()
+
+  const getRelationshipDescription = () => {
+    if (!constraint.dependsOnValue?.variableId || !dependentVariable) return ""
+
+    const rel = constraint.dependsOnValue.relationship
+    const varName = dependentVariable.name
+    const mult = constraint.dependsOnValue.multiplier || 1
+    const offset = constraint.dependsOnValue.offset || 0
+
+    let base = ""
+    switch (rel) {
+      case "less_than":
+        base = `< ${varName}`
+        break
+      case "less_equal":
+        base = `≤ ${varName}`
+        break
+      case "greater_than":
+        base = `> ${varName}`
+        break
+      case "greater_equal":
+        base = `≥ ${varName}`
+        break
+      case "equal_to":
+        base = `= ${varName}`
+        break
+      case "multiple_of":
+        base = `multiple of ${varName}`
+        break
+      case "factor_of":
+        base = `factor of ${varName}`
+        break
+      case "custom":
+        return constraint.dependsOnValue.customFormula || "custom formula"
+    }
+
+    if (mult !== 1) base = base.replace(varName, `${mult} × ${varName}`)
+    if (offset !== 0) base += ` ${offset >= 0 ? "+" : ""}${offset}`
+
+    return base
+  }
+
   return (
     <div className="space-y-4">
-      {/* Basic Range */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label>Min Value</Label>
-          <Input
-            type="number"
-            placeholder="e.g., 1"
-            value={constraint.min || ""}
-            onChange={(e) => updateConstraint({ min: e.target.value ? Number(e.target.value) : undefined })}
-          />
-        </div>
-        <div>
-          <Label>Max Value</Label>
-          <Input
-            type="number"
-            placeholder="e.g., 1000"
-            value={constraint.max || ""}
-            onChange={(e) => updateConstraint({ max: e.target.value ? Number(e.target.value) : undefined })}
-          />
-        </div>
-      </div>
-
       {/* Value Dependencies */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm">Value Dependencies</CardTitle>
-            <Switch checked={!!constraint.dependsOnValue} onCheckedChange={handleDependencyChange} />
+            <Switch checked={hasDependency} onCheckedChange={handleDependencyChange} />
           </div>
         </CardHeader>
-        {constraint.dependsOnValue && (
+        {hasDependency && (
           <CardContent className="pt-0 space-y-3">
             <div>
               <Label>Depends on Variable</Label>
               <Select
-                value={constraint.dependsOnValue.variableId}
+                value={constraint.dependsOnValue?.variableId || ""}
                 onValueChange={(value) => handleDependencyUpdate("variableId", value)}
               >
                 <SelectTrigger>
@@ -106,7 +190,7 @@ export function ScalarConstraints({
             <div>
               <Label>Relationship</Label>
               <Select
-                value={constraint.dependsOnValue.relationship}
+                value={constraint.dependsOnValue?.relationship || "less_equal"}
                 onValueChange={(value) => handleDependencyUpdate("relationship", value)}
               >
                 <SelectTrigger>
@@ -125,14 +209,17 @@ export function ScalarConstraints({
               </Select>
             </div>
 
-            {constraint.dependsOnValue.relationship === "custom" ? (
+            {constraint.dependsOnValue?.relationship === "custom" ? (
               <div>
                 <Label>Custom Formula</Label>
                 <Input
-                  placeholder="e.g., n/2 + 1, n*2-1"
-                  value={constraint.dependsOnValue.customFormula || ""}
+                  placeholder="e.g., n/2 + 1, n*2-1, min(n, 50)"
+                  value={constraint.dependsOnValue?.customFormula || ""}
                   onChange={(e) => handleDependencyUpdate("customFormula", e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Use variable names in your formula. Example: n/2 + 1
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
@@ -142,7 +229,7 @@ export function ScalarConstraints({
                     type="number"
                     step="0.1"
                     placeholder="1"
-                    value={constraint.dependsOnValue.multiplier || ""}
+                    value={constraint.dependsOnValue?.multiplier || ""}
                     onChange={(e) => handleDependencyUpdate("multiplier", e.target.value ? Number(e.target.value) : 1)}
                   />
                 </div>
@@ -151,30 +238,69 @@ export function ScalarConstraints({
                   <Input
                     type="number"
                     placeholder="0"
-                    value={constraint.dependsOnValue.offset || ""}
+                    value={constraint.dependsOnValue?.offset || ""}
                     onChange={(e) => handleDependencyUpdate("offset", e.target.value ? Number(e.target.value) : 0)}
                   />
                 </div>
               </div>
             )}
 
-            {constraint.dependsOnValue.variableId && (
-              <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
-                <strong>Preview:</strong> This variable will be{" "}
-                {constraint.dependsOnValue.relationship === "less_than" && "less than"}
-                {constraint.dependsOnValue.relationship === "less_equal" && "less than or equal to"}
-                {constraint.dependsOnValue.relationship === "greater_than" && "greater than"}
-                {constraint.dependsOnValue.relationship === "greater_equal" && "greater than or equal to"}
-                {constraint.dependsOnValue.relationship === "equal_to" && "equal to"}
-                {constraint.dependsOnValue.relationship === "multiple_of" && "a multiple of"}
-                {constraint.dependsOnValue.relationship === "factor_of" && "a factor of"} the selected variable
-                {constraint.dependsOnValue.multiplier !== 1 && ` × ${constraint.dependsOnValue.multiplier}`}
-                {constraint.dependsOnValue.offset !== 0 &&
-                  ` ${constraint.dependsOnValue.offset >= 0 ? "+" : ""}${constraint.dependsOnValue.offset}`}
-              </div>
+            {constraint.dependsOnValue?.variableId && (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Constraint:</strong> This variable will be {getRelationshipDescription()}
+                </AlertDescription>
+              </Alert>
             )}
           </CardContent>
         )}
+      </Card>
+
+      {/* Dynamic Range Inputs */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">
+            {hasDependency ? "Additional Range Constraints" : "Range Constraints"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-3">
+          {rangeConstraints.note && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-sm">{rangeConstraints.note}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className={rangeConstraints.minDisabled ? "text-muted-foreground" : ""}>Min Value</Label>
+              <Input
+                type="number"
+                placeholder={rangeConstraints.minDisabled ? "Auto" : "e.g., 1"}
+                value={rangeConstraints.minDisabled ? "" : constraint.min || ""}
+                onChange={(e) => updateConstraint({ min: e.target.value ? Number(e.target.value) : undefined })}
+                disabled={rangeConstraints.minDisabled}
+              />
+              {rangeConstraints.minNote && (
+                <p className="text-xs text-muted-foreground mt-1">{rangeConstraints.minNote}</p>
+              )}
+            </div>
+            <div>
+              <Label className={rangeConstraints.maxDisabled ? "text-muted-foreground" : ""}>Max Value</Label>
+              <Input
+                type="number"
+                placeholder={rangeConstraints.maxDisabled ? "Auto" : "e.g., 1000"}
+                value={rangeConstraints.maxDisabled ? "" : constraint.max || ""}
+                onChange={(e) => updateConstraint({ max: e.target.value ? Number(e.target.value) : undefined })}
+                disabled={rangeConstraints.maxDisabled}
+              />
+              {rangeConstraints.maxNote && (
+                <p className="text-xs text-muted-foreground mt-1">{rangeConstraints.maxNote}</p>
+              )}
+            </div>
+          </div>
+        </CardContent>
       </Card>
 
       {/* Custom Logic */}
@@ -185,6 +311,7 @@ export function ScalarConstraints({
           value={constraint.customLogic || ""}
           onChange={(e) => updateConstraint({ customLogic: e.target.value })}
         />
+        <p className="text-xs text-muted-foreground mt-1">Additional constraints beyond the dependency rules</p>
       </div>
     </div>
   )
